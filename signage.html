@@ -16,6 +16,8 @@
     --cat-signage: #1565c0;
     --cat-caution: #e65100;
     --cat-aid: #2e7d32;
+    --cat-guard: #6a1b9a;
+    --cat-bus: #00838f;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif; }
@@ -210,6 +212,8 @@
   .cat-btn.selected.cat-signage { border-color: var(--cat-signage); background: #e3f2fd; color: var(--cat-signage); }
   .cat-btn.selected.cat-caution { border-color: var(--cat-caution); background: #fff3e0; color: var(--cat-caution); }
   .cat-btn.selected.cat-aid { border-color: var(--cat-aid); background: #e8f5e9; color: var(--cat-aid); }
+  .cat-btn.selected.cat-guard { border-color: var(--cat-guard); background: #f3e5f5; color: var(--cat-guard); }
+  .cat-btn.selected.cat-bus { border-color: var(--cat-bus); background: #e0f7fa; color: var(--cat-bus); }
 
   /* トースト */
   #toast {
@@ -330,7 +334,9 @@ const COURSE_COORDS_FALLBACK = [];
 const CATEGORIES = {
   signage: { label: '看板・案内板', color: '#1565c0', icon: '🚩' },
   caution: { label: '注意喚起',     color: '#e65100', icon: '⚠️' },
-  aid:     { label: 'エイド・給水', color: '#2e7d32', icon: '💧' }
+  aid:     { label: 'エイド・給水', color: '#2e7d32', icon: '💧' },
+  guard:   { label: '立哨',         color: '#6a1b9a', icon: '🧍' },
+  bus:     { label: 'BUS',          color: '#00838f', icon: '🚌' }
 };
 
 const STATUSES = {
