@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>東北風土マラソン - コース看板設置管理</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<style>
+  :root {
+    --theme-color: #4527a0;
+    --theme-color-dark: #311b70;
+    --status-not-placed: #9e9e9e;
+    --status-placed: #2e7d32;
+    --status-collected: #1565c0;
+    --cat-signage: #1565c0;
+    --cat-caution: #e65100;
+    --cat-aid: #2e7d32;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif; }
+  body { overflow: hidden; }
+
+  /* ヘッダー */
+  #header {
+    position: fixed; top: 0; left: 0; right: 0; height: 58px;
+    background: var(--theme-color); color: #fff; z-index: 1000;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  #header h1 { font-size: 16px; margin: 0; font-weight: 600; line-height: 1.3; }
+  #header .subtitle { font-size: 11px; opacity: 0.85; font-weight: 400; }
+  #refreshBtn {
+    background: rgba(255,255,255,0.15); border: none; color: #fff;
+    width: 38px; height: 38px; border-radius: 50%; font-size: 18px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  #refreshBtn:active { background: rgba(255,255,255,0.3); }
+  #refreshBtn.spinning svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  #headerBtns { display: flex; gap: 8px; align-items: center; }
+  #courseDrawBtn {
+    background: rgba(255,255,255,0.15); border: none; color: #fff;
+    width: 38px; height: 38px; border-radius: 50%; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  #courseDrawBtn.active { background: #ff8f00; }
+  #courseDrawBtn:active { background: rgba(255,255,255,0.3); }
+
+  /* プログレスバー */
+  #progressWrap {
+    position: fixed; top: 58px; left: 0; right: 0; height: 22px; z-index: 999;
+    background: #e0e0e0;
+  }
+  #progressBar {
+    height: 100%; background: linear-gradient(90deg, var(--status-placed), #43a047);
+    width: 0%; transition: width 0.4s ease;
+    display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;
+  }
+  #progressLabel {
+    position: absolute; top: 0; left: 0; right: 0; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: #333; pointer-events: none;
+  }
+
+  /* 地図 */
+  #map { position: fixed; top: 80px; left: 0; right: 0; bottom: 0; z-index: 1; }
+
+  /* 統計オーバーレイ */
+  #statsOverlay {
+    position: fixed; left: 10px; bottom: 10px; z-index: 500;
+    background: rgba(255,255,255,0.95); border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 8px 12px;
+    font-size: 12px; line-height: 1.7; min-width: 130px;
+  }
+  #statsOverlay .stat-row { display: flex; align-items: center; gap: 6px; }
+  #statsOverlay .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  #statsOverlay .stat-count { margin-left: auto; font-weight: 700; }
+
+  /* 凡例 */
+  #legend {
+    position: fixed; right: 10px; bottom: 10px; z-index: 500;
+    background: rgba(255,255,255,0.95); border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 8px 12px;
+    font-size: 11px; line-height: 1.8;
+  }
+  #legend .legend-title { font-weight: 700; margin-bottom: 2px; font-size: 11px; }
+  #legend .legend-row { display: flex; align-items: center; gap: 6px; }
+  #legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+
+  /* リストトグルFAB */
+  #listToggleBtn {
+    position: fixed; right: 10px; bottom: 130px; z-index: 600;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--theme-color); color: #fff; border: none;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3); font-size: 22px; cursor: pointer;
+  }
+
+  /* 新規追加ヒント */
+  #addHint {
+    position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.75); color: #fff; padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; z-index: 500; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+  }
+  #addHint.show { opacity: 1; }
+
+  /* コース描画ツールバー */
+  #drawToolbar {
+    position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
+    background: #ff8f00; color: #fff; border-radius: 12px; z-index: 900;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3); padding: 10px 12px;
+    display: none; flex-direction: column; gap: 8px; min-width: 240px;
+  }
+  #drawToolbar.show { display: flex; }
+  #drawToolbar .draw-status { font-size: 12px; font-weight: 700; text-align: center; }
+  #drawToolbar .draw-btn-row { display: flex; gap: 6px; }
+  #drawToolbar button {
+    flex: 1; border: none; border-radius: 8px; padding: 8px 4px; font-size: 12px;
+    font-weight: 700; cursor: pointer;
+  }
+  #drawUndoBtn { background: rgba(255,255,255,0.9); color: #ff8f00; }
+  #drawClearBtn { background: rgba(255,255,255,0.9); color: #c62828; }
+  #drawCancelBtn { background: rgba(0,0,0,0.25); color: #fff; }
+  #drawSaveBtn { background: #fff; color: #2e7d32; }
+
+  /* リストパネル */
+  #listPanel {
+    position: fixed; top: 0; right: -100%; width: 88%; max-width: 380px; height: 100%;
+    background: #fff; z-index: 1500; box-shadow: -3px 0 12px rgba(0,0,0,0.3);
+    transition: right 0.3s ease; display: flex; flex-direction: column;
+  }
+  #listPanel.open { right: 0; }
+  #listPanelHeader {
+    background: var(--theme-color); color: #fff; padding: 16px 14px;
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  #listPanelHeader h2 { font-size: 15px; margin: 0; }
+  #listPanelClose { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; }
+  #listFilters { display: flex; gap: 6px; padding: 10px; flex-wrap: wrap; border-bottom: 1px solid #eee; flex-shrink: 0; }
+  .filter-chip {
+    border: 1px solid #ccc; border-radius: 16px; padding: 5px 10px; font-size: 11px;
+    background: #fff; cursor: pointer; user-select: none;
+  }
+  .filter-chip.active { background: var(--theme-color); color: #fff; border-color: var(--theme-color); }
+  #listItems { flex: 1; overflow-y: auto; padding: 6px; }
+  .list-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px;
+    margin-bottom: 4px; cursor: pointer; border: 1px solid #eee;
+  }
+  .list-item:active { background: #f5f5f5; }
+  .list-item .cat-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .list-item .item-main { flex: 1; min-width: 0; }
+  .list-item .item-label { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-item .item-sub { font-size: 11px; color: #888; }
+  .status-badge {
+    font-size: 10px; padding: 3px 8px; border-radius: 10px; color: #fff; flex-shrink: 0;
+    white-space: nowrap;
+  }
+  #listOverlayBg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1400;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  #listOverlayBg.open { opacity: 1; pointer-events: auto; }
+
+  /* モーダル */
+  #modalOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 2000;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  #modalOverlay.open { opacity: 1; pointer-events: auto; }
+  #modal {
+    position: fixed; left: 0; right: 0; bottom: -100%; z-index: 2001;
+    background: #fff; border-radius: 16px 16px 0 0; max-height: 82%;
+    overflow-y: auto; transition: bottom 0.3s ease; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+  }
+  #modal.open { bottom: 0; }
+  #modalHandle { width: 40px; height: 4px; background: #ddd; border-radius: 2px; margin: 10px auto; }
+  #modalContent { padding: 4px 20px 24px; }
+  #modalTitle { font-size: 17px; font-weight: 700; margin: 0 0 2px; }
+  #modalSub { font-size: 12px; color: #888; margin-bottom: 4px; }
+  #modalMapLink { font-size: 12px; color: var(--theme-color); text-decoration: none; }
+  .modal-section { margin-top: 16px; }
+  .modal-section-label { font-size: 12px; font-weight: 700; color: #555; margin-bottom: 6px; }
+  .status-btn-group { display: flex; gap: 6px; }
+  .status-btn {
+    flex: 1; padding: 10px 4px; border-radius: 8px; border: 2px solid #ddd; background: #fff;
+    font-size: 12px; font-weight: 600; cursor: pointer; color: #666;
+  }
+  .status-btn.selected.st-not_placed { border-color: var(--status-not-placed); background: #f5f5f5; color: var(--status-not-placed); }
+  .status-btn.selected.st-placed { border-color: var(--status-placed); background: #e8f5e9; color: var(--status-placed); }
+  .status-btn.selected.st-collected { border-color: var(--status-collected); background: #e3f2fd; color: var(--status-collected); }
+  .modal-input {
+    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;
+    font-family: inherit;
+  }
+  textarea.modal-input { resize: vertical; min-height: 60px; }
+  .modal-btn-row { display: flex; gap: 8px; margin-top: 20px; }
+  #saveBtn, #deleteBtn {
+    flex: 1; padding: 13px; border-radius: 10px; border: none; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  #saveBtn { background: var(--theme-color); color: #fff; }
+  #deleteBtn { background: #fff; color: #c62828; border: 1px solid #c62828; flex: 0 0 90px; }
+
+  /* カテゴリ選択(新規追加時) */
+  .cat-btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cat-btn {
+    flex: 1; min-width: 90px; padding: 12px 6px; border-radius: 8px; border: 2px solid #ddd;
+    background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #666;
+  }
+  .cat-btn.selected.cat-signage { border-color: var(--cat-signage); background: #e3f2fd; color: var(--cat-signage); }
+  .cat-btn.selected.cat-caution { border-color: var(--cat-caution); background: #fff3e0; color: var(--cat-caution); }
+  .cat-btn.selected.cat-aid { border-color: var(--cat-aid); background: #e8f5e9; color: var(--cat-aid); }
+
+  /* トースト */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #323232; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 13px;
+    z-index: 3000; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+    max-width: 85%; text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.error { background: #c62828; }
+
+  /* ローディング */
+  #loadingOverlay {
+    position: fixed; inset: 0; background: #fff; z-index: 5000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 0.3s;
+  }
+  #loadingOverlay.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 40px; height: 40px; border: 4px solid #eee; border-top-color: var(--theme-color);
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 14px;
+  }
+
+  /* マーカーアイコン共通 */
+  .marker-icon {
+    width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    border: 2px solid #fff;
+  }
+  .marker-icon span { transform: rotate(45deg); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>コース看板・設置管理</h1>
+    <div class="subtitle">東北風土マラソン2027</div>
+  </div>
+  <div id="headerBtns">
+    <button id="courseDrawBtn" title="コース描画モード">✏️</button>
+    <button id="refreshBtn" title="再読み込み">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M23 4v6h-6M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div id="progressWrap">
+  <div id="progressBar"></div>
+  <div id="progressLabel">読み込み中...</div>
+</div>
+
+<div id="map"></div>
+<div id="addHint">地図を長押しして新しいポイントを追加</div>
+<div id="drawToolbar">
+  <div class="draw-status" id="drawStatusLabel">コース描画中 - 地図をタップして線を引く</div>
+  <div class="draw-btn-row">
+    <button id="drawUndoBtn">元に戻す</button>
+    <button id="drawClearBtn">全消去</button>
+  </div>
+  <div class="draw-btn-row">
+    <button id="drawCancelBtn">キャンセル</button>
+    <button id="drawSaveBtn">保存して終了</button>
+  </div>
+</div>
+
+<div id="statsOverlay"></div>
+<div id="legend"></div>
+
+<button id="listToggleBtn">☰</button>
+
+<div id="listOverlayBg"></div>
+<div id="listPanel">
+  <div id="listPanelHeader">
+    <h2>設置ポイント一覧</h2>
+    <button id="listPanelClose">×</button>
+  </div>
+  <div id="listFilters"></div>
+  <div id="listItems"></div>
+</div>
+
+<div id="modalOverlay"></div>
+<div id="modal">
+  <div id="modalHandle"></div>
+  <div id="modalContent"></div>
+</div>
+
+<div id="toast"></div>
+
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:#666;">データを読み込み中...</div>
+</div>
+
+<script>
+// =============================================================================
+// 設定
+// =============================================================================
+
+// TODO: GASをデプロイしたWebアプリのURLに置き換える
+const API_URL = 'YOUR_GAS_WEB_APP_URL_HERE';
+
+// 長沼フートピア トヨテツの丘公園 周辺の座標(仮)。
+// 現在地表示のみ(住所: 宮城県登米市迫町北方字天形161-84 付近の概算座標)
+const MAP_CENTER = { lat: 38.652, lng: 141.128 };
+const MAP_ZOOM = 15;
+
+// コースラインはGPXファイルを使わず、ヘッダーの✏️ボタン「コース描画モード」で
+// 地図をタップしてその場で描き、GAS側の course シートに保存する。
+// 保存されたコースは起動時に fetchCourse() で読み込んで描画する。
+// (GPXが後日手に入った場合は、そこから抽出した座標配列をここに入れて
+//  デフォルトの初期表示に使うこともできる。空配列なら未使用)
+const COURSE_COORDS_FALLBACK = [];
+
+const CATEGORIES = {
+  signage: { label: '看板・案内板', color: '#1565c0', icon: '🚩' },
+  caution: { label: '注意喚起',     color: '#e65100', icon: '⚠️' },
+  aid:     { label: 'エイド・給水', color: '#2e7d32', icon: '💧' }
+};
+
+const STATUSES = {
+  not_placed: { label: '未設置', color: '#9e9e9e' },
+  placed:     { label: '設置済', color: '#2e7d32' },
+  collected:  { label: '回収済', color: '#1565c0' }
+};
+const STATUS_ORDER = ['not_placed', 'placed', 'collected'];
+
+// =============================================================================
+// 状態
+// =============================================================================
+
+let map;
+let points = [];           // GASから取得した全ポイント
+let markers = {};          // id -> Leaflet marker
+let activePointId = null;  // モーダルで開いている / 新規追加中のポイント
+let pendingNewLatLng = null; // 長押しで追加待ちの座標
+let pendingNewCategory = 'signage';
+let listFilter = 'all';    // all | signage | caution | aid
+
+let placeholderMarker = null;
+let courseLine = null;         // 保存済みコースを表示するLeafletポリライン
+let savedCoursePoints = [];    // GASから読み込んだ現在のコース([{seq,lat,lng}, ...])
+
+let drawMode = false;
+let drawingPoints = [];        // 描画中の頂点配列 [{lat,lng}, ...]
+let drawLine = null;           // 描画中のLeafletポリライン(編集用スタイル)
+let drawVertexGroup = null;    // 描画中の頂点マーカー群
+let longPressTimer = null;
+
+// =============================================================================
+// 初期化
+// =============================================================================
+
+function initMap() {
+  map = L.map('map', { zoomControl: true }).setView([MAP_CENTER.lat, MAP_CENTER.lng], MAP_ZOOM);
+
+  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>',
+    maxZoom: 18
+  }).addTo(map);
+
+  showPlaceholderMarker();
+
+  // 長押しでポイント追加(描画モード中は無効)
+  map.on('mousedown touchstart', function (e) {
+    if (drawMode) return;
+    longPressTimer = setTimeout(function () {
+      openAddModal(e.latlng);
+    }, 600);
+  });
+  map.on('mouseup touchend mousemove touchmove dragstart', function () {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  });
+
+  // タップでコースの頂点を追加(描画モード中のみ)
+  map.on('click', function (e) {
+    if (!drawMode) return;
+    drawingPoints.push({ lat: e.latlng.lat, lng: e.latlng.lng });
+    renderDrawingLine();
+    updateDrawStatusLabel();
+  });
+
+  showAddHint();
+}
+
+function showPlaceholderMarker() {
+  if (placeholderMarker) { map.removeLayer(placeholderMarker); placeholderMarker = null; }
+  placeholderMarker = L.marker([MAP_CENTER.lat, MAP_CENTER.lng], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="background:#616161;color:#fff;font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.4);">会場周辺(仮)</div>',
+      iconSize: null
+    })
+  }).addTo(map);
+}
+
+function showAddHint() {
+  const hint = document.getElementById('addHint');
+  hint.classList.add('show');
+  setTimeout(function () { hint.classList.remove('show'); }, 3500);
+}
+
+// =============================================================================
+// JSONP通信
+// =============================================================================
+
+function jsonp(url) {
+  return new Promise(function (resolve, reject) {
+    const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+    const script = document.createElement('script');
+    let done = false;
+
+    window[cbName] = function (data) {
+      done = true;
+      resolve(data);
+      cleanup();
+    };
+
+    function cleanup() {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    script.onerror = function () {
+      if (!done) { reject(new Error('通信に失敗しました')); cleanup(); }
+    };
+    setTimeout(function () {
+      if (!done) { reject(new Error('通信がタイムアウトしました')); cleanup(); }
+    }, 15000);
+
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    script.src = url + sep + 'callback=' + cbName;
+    document.body.appendChild(script);
+  });
+}
+
+async function fetchPoints() {
+  if (!API_URL || API_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
+    showToast('API_URL が未設定です。Code.gs をデプロイしてURLを設定してください', true);
+    points = [];
+    return;
+  }
+  const json = await jsonp(API_URL + '?action=get');
+  if (json.success) {
+    points = json.points || [];
+  } else {
+    throw new Error(json.error || 'データ取得に失敗しました');
+  }
+}
+
+async function savePoint(payload) {
+  const params = new URLSearchParams(payload).toString();
+  const json = await jsonp(API_URL + '?action=update&' + params);
+  if (json.success) return json;
+  if (json.error && json.error.indexOf('見つかりません') !== -1) {
+    const addJson = await jsonp(API_URL + '?action=add&' + params);
+    if (addJson.success) return addJson;
+    throw new Error(addJson.error || '保存に失敗しました');
+  }
+  throw new Error(json.error || '保存に失敗しました');
+}
+
+async function addPointRemote(payload) {
+  const params = new URLSearchParams(payload).toString();
+  const json = await jsonp(API_URL + '?action=add&' + params);
+  if (json.success) return json;
+  throw new Error(json.error || '追加に失敗しました');
+}
+
+async function deletePointRemote(id) {
+  const json = await jsonp(API_URL + '?action=delete&id=' + encodeURIComponent(id));
+  if (json.success) return json;
+  throw new Error(json.error || '削除に失敗しました');
+}
+
+// --- コースライン ---
+
+async function fetchCourse() {
+  if (!API_URL || API_URL === 'YOUR_GAS_WEB_APP_URL_HERE') {
+    savedCoursePoints = COURSE_COORDS_FALLBACK.map(function (c, i) { return { seq: i, lat: c.lat, lng: c.lng }; });
+    return;
+  }
+  const json = await jsonp(API_URL + '?action=getCourse');
+  if (json.success) {
+    savedCoursePoints = (json.course && json.course.length > 0)
+      ? json.course
+      : COURSE_COORDS_FALLBACK.map(function (c, i) { return { seq: i, lat: c.lat, lng: c.lng }; });
+  } else {
+    throw new Error(json.error || 'コースの取得に失敗しました');
+  }
+}
+
+// 描画した頂点をGASに保存する。1回のGETリクエストに収まらない可能性があるため、
+// 数十点ずつのバッチに分けて順番に送信する(URLの長さ制限を避けるため)。
+async function saveCourseRemote(pointsArr) {
+  const clearJson = await jsonp(API_URL + '?action=clearCourse');
+  if (!clearJson.success) throw new Error(clearJson.error || 'コースのクリアに失敗しました');
+
+  const CHUNK_SIZE = 40;
+  const chunks = [];
+  for (let i = 0; i < pointsArr.length; i += CHUNK_SIZE) {
+    chunks.push(pointsArr.slice(i, i + CHUNK_SIZE).map(function (p, j) {
+      return { seq: i + j, lat: p.lat, lng: p.lng };
+    }));
+  }
+
+  for (let c = 0; c < chunks.length; c++) {
+    updateDrawStatusLabel('保存中... (' + (c + 1) + '/' + chunks.length + ')');
+    const payload = 'points=' + encodeURIComponent(JSON.stringify(chunks[c]));
+    const json = await jsonp(API_URL + '?action=addCourseBatch&' + payload);
+    if (!json.success) throw new Error(json.error || '保存に失敗しました');
+  }
+}
+
+// =============================================================================
+// 描画
+// =============================================================================
+
+function render() {
+  renderMarkers();
+  renderStats();
+  renderLegend();
+  renderProgress();
+  renderList();
+  renderSavedCourseLine();
+}
+
+function renderSavedCourseLine() {
+  if (courseLine) { map.removeLayer(courseLine); courseLine = null; }
+  if (savedCoursePoints.length > 1) {
+    if (placeholderMarker) { map.removeLayer(placeholderMarker); placeholderMarker = null; }
+    const latlngs = savedCoursePoints.map(function (p) { return [p.lat, p.lng]; });
+    courseLine = L.polyline(latlngs, { color: '#616161', weight: 4, opacity: 0.75 }).addTo(map);
+  } else if (!placeholderMarker) {
+    showPlaceholderMarker();
+  }
+}
+
+function markerIconFor(point) {
+  const cat = CATEGORIES[point.category] || CATEGORIES.signage;
+  const status = STATUSES[point.status] || STATUSES.not_placed;
+  const bg = point.status === 'not_placed' ? '#bdbdbd' : cat.color;
+  const opacity = point.status === 'collected' ? '0.55' : '1';
+  return L.divIcon({
+    className: '',
+    html: '<div class="marker-icon" style="background:' + bg + ';opacity:' + opacity + ';">' +
+          '<span>' + cat.icon + '</span></div>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 28]
+  });
+}
+
+function renderMarkers() {
+  // 既存マーカーをクリア
+  Object.keys(markers).forEach(function (id) { map.removeLayer(markers[id]); });
+  markers = {};
+
+  points.forEach(function (p) {
+    const marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: markerIconFor(p) });
+    marker.on('click', function () { openEditModal(p.id); });
+    marker.addTo(map);
+    markers[p.id] = marker;
+  });
+}
+
+function renderStats() {
+  const counts = { not_placed: 0, placed: 0, collected: 0 };
+  points.forEach(function (p) { if (counts[p.status] !== undefined) counts[p.status]++; });
+
+  const el = document.getElementById('statsOverlay');
+  el.innerHTML = STATUS_ORDER.map(function (key) {
+    const s = STATUSES[key];
+    return '<div class="stat-row"><span class="dot" style="background:' + s.color + '"></span>' +
+           s.label + '<span class="stat-count">' + counts[key] + '</span></div>';
+  }).join('') + '<div class="stat-row" style="border-top:1px solid #eee;margin-top:4px;padding-top:4px;">計<span class="stat-count">' + points.length + '</span></div>';
+}
+
+function renderLegend() {
+  const el = document.getElementById('legend');
+  let html = '<div class="legend-title">カテゴリー</div>';
+  Object.keys(CATEGORIES).forEach(function (key) {
+    const c = CATEGORIES[key];
+    html += '<div class="legend-row"><span class="swatch" style="background:' + c.color + '"></span>' + c.icon + ' ' + c.label + '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function renderProgress() {
+  const total = points.length;
+  const done = points.filter(function (p) { return p.status === 'placed' || p.status === 'collected'; }).length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = total === 0 ? 'ポイントがまだありません' : ('設置進捗 ' + done + '/' + total + ' (' + pct + '%)');
+}
+
+function renderList() {
+  const filtered = listFilter === 'all' ? points : points.filter(function (p) { return p.category === listFilter; });
+
+  const filterEl = document.getElementById('listFilters');
+  const filters = [{ key: 'all', label: 'すべて' }].concat(
+    Object.keys(CATEGORIES).map(function (k) { return { key: k, label: CATEGORIES[k].label }; })
+  );
+  filterEl.innerHTML = filters.map(function (f) {
+    return '<div class="filter-chip' + (listFilter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">' + f.label + '</div>';
+  }).join('');
+  filterEl.querySelectorAll('.filter-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      listFilter = chip.getAttribute('data-filter');
+      renderList();
+    });
+  });
+
+  const listEl = document.getElementById('listItems');
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:#999;font-size:13px;">ポイントがありません</div>';
+    return;
+  }
+  listEl.innerHTML = filtered.map(function (p) {
+    const cat = CATEGORIES[p.category] || CATEGORIES.signage;
+    const status = STATUSES[p.status] || STATUSES.not_placed;
+    return '<div class="list-item" data-id="' + p.id + '">' +
+      '<span class="cat-dot" style="background:' + cat.color + '"></span>' +
+      '<div class="item-main">' +
+        '<div class="item-label">' + cat.icon + ' ' + (p.label || cat.label) + '</div>' +
+        '<div class="item-sub">' + (p.worker || '担当未設定') + '</div>' +
+      '</div>' +
+      '<span class="status-badge" style="background:' + status.color + '">' + status.label + '</span>' +
+    '</div>';
+  }).join('');
+  listEl.querySelectorAll('.list-item').forEach(function (item) {
+    item.addEventListener('click', function () {
+      const id = item.getAttribute('data-id');
+      closeListPanel();
+      const p = points.find(function (pt) { return String(pt.id) === String(id); });
+      if (p) {
+        map.setView([parseFloat(p.lat), parseFloat(p.lng)], Math.max(map.getZoom(), 17));
+        openEditModal(id);
+      }
+    });
+  });
+}
+
+// =============================================================================
+// コース描画モード
+// =============================================================================
+
+function enterDrawMode() {
+  drawMode = true;
+  drawingPoints = savedCoursePoints.map(function (p) { return { lat: p.lat, lng: p.lng }; });
+  document.getElementById('courseDrawBtn').classList.add('active');
+  document.getElementById('drawToolbar').classList.add('show');
+  renderDrawingLine();
+  updateDrawStatusLabel();
+  showToast('コース描画モード: 地図をタップして線をつなげてください');
+}
+
+function exitDrawMode() {
+  drawMode = false;
+  document.getElementById('courseDrawBtn').classList.remove('active');
+  document.getElementById('drawToolbar').classList.remove('show');
+  if (drawLine) { map.removeLayer(drawLine); drawLine = null; }
+  if (drawVertexGroup) { map.removeLayer(drawVertexGroup); drawVertexGroup = null; }
+  drawingPoints = [];
+}
+
+function renderDrawingLine() {
+  if (drawLine) { map.removeLayer(drawLine); drawLine = null; }
+  if (drawVertexGroup) { map.removeLayer(drawVertexGroup); drawVertexGroup = null; }
+  if (drawingPoints.length > 0) {
+    const latlngs = drawingPoints.map(function (p) { return [p.lat, p.lng]; });
+    drawLine = L.polyline(latlngs, { color: '#ff8f00', weight: 4, opacity: 0.9, dashArray: '6 6' }).addTo(map);
+    drawVertexGroup = L.layerGroup(drawingPoints.map(function (p) {
+      return L.circleMarker([p.lat, p.lng], {
+        radius: 4, color: '#ff8f00', fillColor: '#fff', fillOpacity: 1, weight: 2
+      });
+    })).addTo(map);
+  }
+}
+
+function updateDrawStatusLabel(overrideText) {
+  const label = document.getElementById('drawStatusLabel');
+  label.textContent = overrideText || ('コース描画中 - 地図をタップして線を引く (' + drawingPoints.length + '点)');
+}
+
+function undoLastVertex() {
+  drawingPoints.pop();
+  renderDrawingLine();
+  updateDrawStatusLabel();
+}
+
+function clearAllVertices() {
+  if (drawingPoints.length > 0 && !confirm('描画中の頂点をすべて消去しますか？')) return;
+  drawingPoints = [];
+  renderDrawingLine();
+  updateDrawStatusLabel();
+}
+
+async function saveAndExitDrawMode() {
+  if (drawingPoints.length < 2) {
+    showToast('2点以上タップしてから保存してください', true);
+    return;
+  }
+  const btn = document.getElementById('drawSaveBtn');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    await saveCourseRemote(drawingPoints);
+    showToast('コースラインを保存しました');
+    exitDrawMode();
+    await fetchCourse();
+    renderSavedCourseLine();
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存して終了';
+  }
+}
+
+function cancelDrawMode() {
+  if (drawingPoints.length > 0 && !confirm('編集中の内容を破棄してキャンセルしますか？')) return;
+  exitDrawMode();
+}
+
+// =============================================================================
+// モーダル: 新規追加
+// =============================================================================
+
+function openAddModal(latlng) {
+  pendingNewLatLng = latlng;
+  pendingNewCategory = 'signage';
+  activePointId = null;
+
+  const content = document.getElementById('modalContent');
+  content.innerHTML =
+    '<div id="modalTitle">新しいポイントを追加</div>' +
+    '<div id="modalSub">' + latlng.lat.toFixed(6) + ', ' + latlng.lng.toFixed(6) + '</div>' +
+    '<a id="modalMapLink" href="https://www.google.com/maps?q=' + latlng.lat + ',' + latlng.lng + '" target="_blank">Google マップで開く</a>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">カテゴリー</div>' +
+      '<div class="cat-btn-group" id="catBtnGroup">' +
+        Object.keys(CATEGORIES).map(function (key) {
+          const c = CATEGORIES[key];
+          return '<button class="cat-btn cat-' + key + (key === pendingNewCategory ? ' selected' : '') + '" data-cat="' + key + '">' + c.icon + ' ' + c.label + '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">名称・メモ(任意)</div>' +
+      '<input type="text" class="modal-input" id="newLabelInput" placeholder="例: 5km地点 案内看板">' +
+    '</div>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">担当者(任意)</div>' +
+      '<input type="text" class="modal-input" id="newWorkerInput" placeholder="担当者名">' +
+    '</div>' +
+
+    '<div class="modal-btn-row">' +
+      '<button id="saveBtn">このポイントを追加</button>' +
+    '</div>';
+
+  content.querySelectorAll('.cat-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      pendingNewCategory = btn.getAttribute('data-cat');
+      content.querySelectorAll('.cat-btn').forEach(function (b) { b.classList.remove('selected'); });
+      btn.classList.add('selected');
+    });
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', async function () {
+    const label = document.getElementById('newLabelInput').value.trim();
+    const worker = document.getElementById('newWorkerInput').value.trim();
+    setModalSaving(true);
+    try {
+      await addPointRemote({
+        category: pendingNewCategory,
+        lat: latlng.lat,
+        lng: latlng.lng,
+        label: label,
+        worker: worker,
+        status: 'not_placed'
+      });
+      showToast('ポイントを追加しました');
+      closeModal();
+      await loadAndRender();
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      setModalSaving(false);
+    }
+  });
+
+  openModal();
+}
+
+// =============================================================================
+// モーダル: 編集
+// =============================================================================
+
+function openEditModal(id) {
+  const p = points.find(function (pt) { return String(pt.id) === String(id); });
+  if (!p) return;
+  activePointId = id;
+  pendingNewLatLng = null;
+
+  const cat = CATEGORIES[p.category] || CATEGORIES.signage;
+  let selectedStatus = p.status;
+
+  const content = document.getElementById('modalContent');
+  content.innerHTML =
+    '<div id="modalTitle">' + cat.icon + ' ' + (p.label || cat.label) + '</div>' +
+    '<div id="modalSub">' + cat.label + ' ・ ' + parseFloat(p.lat).toFixed(6) + ', ' + parseFloat(p.lng).toFixed(6) + '</div>' +
+    '<a id="modalMapLink" href="https://www.google.com/maps?q=' + p.lat + ',' + p.lng + '" target="_blank">Google マップで開く</a>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">設置状況</div>' +
+      '<div class="status-btn-group" id="statusBtnGroup">' +
+        STATUS_ORDER.map(function (key) {
+          const s = STATUSES[key];
+          return '<button class="status-btn st-' + key + (key === selectedStatus ? ' selected' : '') + '" data-status="' + key + '">' + s.label + '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">名称・メモ</div>' +
+      '<input type="text" class="modal-input" id="editLabelInput" value="' + escapeHtml(p.label || '') + '" placeholder="名称">' +
+    '</div>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">担当者</div>' +
+      '<input type="text" class="modal-input" id="editWorkerInput" value="' + escapeHtml(p.worker || '') + '" placeholder="担当者名">' +
+    '</div>' +
+
+    '<div class="modal-section">' +
+      '<div class="modal-section-label">メモ</div>' +
+      '<textarea class="modal-input" id="editMemoInput" placeholder="メモ">' + escapeHtml(p.memo || '') + '</textarea>' +
+    '</div>' +
+
+    '<div class="modal-btn-row">' +
+      '<button id="deleteBtn">削除</button>' +
+      '<button id="saveBtn">保存する</button>' +
+    '</div>';
+
+  content.querySelectorAll('.status-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      selectedStatus = btn.getAttribute('data-status');
+      content.querySelectorAll('.status-btn').forEach(function (b) { b.classList.remove('selected'); });
+      btn.classList.add('selected');
+    });
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', async function () {
+    setModalSaving(true);
+    try {
+      await savePoint({
+        id: p.id,
+        category: p.category,
+        lat: p.lat,
+        lng: p.lng,
+        status: selectedStatus,
+        label: document.getElementById('editLabelInput').value.trim(),
+        worker: document.getElementById('editWorkerInput').value.trim(),
+        memo: document.getElementById('editMemoInput').value.trim()
+      });
+      showToast('保存しました');
+      closeModal();
+      await loadAndRender();
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      setModalSaving(false);
+    }
+  });
+
+  document.getElementById('deleteBtn').addEventListener('click', async function () {
+    if (!confirm('このポイントを削除しますか？')) return;
+    setModalSaving(true);
+    try {
+      await deletePointRemote(p.id);
+      showToast('削除しました');
+      closeModal();
+      await loadAndRender();
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      setModalSaving(false);
+    }
+  });
+
+  openModal();
+}
+
+function setModalSaving(saving) {
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) { saveBtn.disabled = saving; saveBtn.textContent = saving ? '保存中...' : (activePointId ? '保存する' : 'このポイントを追加'); }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// =============================================================================
+// モーダル/パネル 開閉
+// =============================================================================
+
+function openModal() {
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('modal').classList.remove('open');
+  activePointId = null;
+  pendingNewLatLng = null;
+}
+function openListPanel() {
+  document.getElementById('listPanel').classList.add('open');
+  document.getElementById('listOverlayBg').classList.add('open');
+}
+function closeListPanel() {
+  document.getElementById('listPanel').classList.remove('open');
+  document.getElementById('listOverlayBg').classList.remove('open');
+}
+
+// =============================================================================
+// トースト
+// =============================================================================
+
+let toastTimer = null;
+function showToast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2800);
+}
+
+// =============================================================================
+// データロード
+// =============================================================================
+
+async function loadAndRender() {
+  try {
+    await Promise.all([fetchPoints(), fetchCourse()]);
+    render();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function initialLoad() {
+  try {
+    await Promise.all([fetchPoints(), fetchCourse()]);
+    render();
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }
+}
+
+// =============================================================================
+// イベント登録
+// =============================================================================
+
+document.getElementById('refreshBtn').addEventListener('click', async function () {
+  const btn = this;
+  btn.classList.add('spinning');
+  await loadAndRender();
+  btn.classList.remove('spinning');
+});
+document.getElementById('listToggleBtn').addEventListener('click', openListPanel);
+document.getElementById('listPanelClose').addEventListener('click', closeListPanel);
+document.getElementById('listOverlayBg').addEventListener('click', closeListPanel);
+document.getElementById('modalOverlay').addEventListener('click', closeModal);
+
+document.getElementById('courseDrawBtn').addEventListener('click', function () {
+  if (drawMode) { cancelDrawMode(); } else { enterDrawMode(); }
+});
+document.getElementById('drawUndoBtn').addEventListener('click', undoLastVertex);
+document.getElementById('drawClearBtn').addEventListener('click', clearAllVertices);
+document.getElementById('drawCancelBtn').addEventListener('click', cancelDrawMode);
+document.getElementById('drawSaveBtn').addEventListener('click', saveAndExitDrawMode);
+
+// =============================================================================
+// 起動
+// =============================================================================
+
+initMap();
+initialLoad();
+</script>
+</body>
+</html>
