@@ -319,11 +319,11 @@
 // TODO: GASをデプロイしたWebアプリのURLに置き換える
 const API_URL = 'https://script.google.com/macros/s/AKfycbwu93cSOQ22zGubaMTXBzoMuT0vw5HyekRVkxgALWjuxiXZAXiv_a31WPIP-eaQJRRMGQ/exec';
 
-// 長沼フートピア トヨテツの丘公園 周辺の座標(仮)。
-// 現在地表示のみ(住所: 宮城県登米市迫町北方字天形161-84 付近の概算座標)
-const MAP_CENTER = { lat: 38.652, lng: 141.128 };
-const MAP_ZOOM = 15;
-
+// スタート/ゴール地点の座標(登録済みポイント「スタート/ゴール」と同じ座標)。
+// Plus Code: M4RP+X5 登米市、宮城県
+const MAP_CENTER = { lat: 38.692438, lng: 141.135438 };
+const MAP_ZOOM = 16;
+  
 // コースラインはGPXファイルを使わず、ヘッダーの✏️ボタン「コース描画モード」で
 // 地図をタップしてその場で描き、GAS側の course シートに保存する。
 // 保存されたコースは起動時に fetchCourse() で読み込んで描画する。
