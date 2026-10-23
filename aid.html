@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>東北風土マラソン - エイド運営管理</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --theme: #1f8a4c;
+    --theme-dark: #146236;
+    --pink: #ea6d9a;
+    --pink-dark: #b8476f;
+    --pink-light: #f6c3d6;
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --text: #222;
+    --sub: #777;
+    --line: #e3e6e4;
+    --st-preparing: #9e9e9e;
+    --st-ready: #1565c0;
+    --st-open: #1f8a4c;
+    --st-closed: #424242;
+    --warn: #e65100;
+    --danger: #c62828;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif; color: var(--text); background: var(--bg); }
+  body { overflow: hidden; }
+  button { font-family: inherit; }
+
+  #header {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 1000;
+    background: var(--theme); color: #fff; display: flex; align-items: center; gap: 10px;
+    padding: 0 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  }
+  #header .titles { flex: 1; min-width: 0; }
+  #header h1 { font-size: 16px; margin: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #header .subtitle { font-size: 11px; opacity: 0.85; }
+  .hbtn {
+    background: rgba(255,255,255,0.16); border: none; color: #fff; min-width: 38px; height: 38px;
+    border-radius: 19px; font-size: 14px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0 10px; flex-shrink: 0;
+  }
+  .hbtn:active { background: rgba(255,255,255,0.3); }
+  .hbtn.spinning svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #backBtn { display: none; }
+  #syncBadge { font-size: 10px; background: var(--warn); color: #fff; border-radius: 10px; padding: 2px 7px; display: none; }
+
+  #main { position: fixed; top: 56px; left: 0; right: 0; bottom: 60px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #main.detail-mode { bottom: 0; }
+  .view { display: none; padding: 12px 12px 24px; max-width: 760px; margin: 0 auto; }
+  .view.active { display: block; }
+  #view-map.active { padding: 0; max-width: none; height: 100%; }
+  #map { width: 100%; height: 100%; }
+
+  #tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 60px; z-index: 1000; background: #fff;
+    border-top: 1px solid var(--line); display: flex;
+  }
+  #tabbar.hidden { display: none; }
+  .tab {
+    flex: 1; border: none; background: none; font-size: 11px; color: var(--sub);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer;
+  }
+  .tab .ico { font-size: 20px; line-height: 1; }
+  .tab.active { color: var(--theme); font-weight: 700; }
+
+  .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  @media (min-width: 560px) { .summary { grid-template-columns: repeat(4, 1fr); } }
+  .stat { background: var(--card); border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .stat .lbl { font-size: 11px; color: var(--sub); }
+  .stat .val { font-size: 22px; font-weight: 800; margin-top: 2px; }
+  .stat .val small { font-size: 12px; font-weight: 600; color: var(--sub); }
+  .stat .bar { height: 5px; background: #eee; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .stat .bar > div { height: 100%; background: var(--theme); }
+
+  .section-title { font-size: 13px; font-weight: 700; color: #555; margin: 16px 2px 8px; display: flex; align-items: center; justify-content: space-between; }
+
+  .aid-card {
+    background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 8px; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-left: 5px solid var(--st-preparing);
+  }
+  .aid-card:active { background: #fafafa; }
+  .aid-card .row1 { display: flex; align-items: center; gap: 8px; }
+  .aid-no {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--pink); color: #fff; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+  }
+  .aid-card .name { font-weight: 700; font-size: 15px; flex: 1; min-width: 0; }
+  .aid-card .km { font-size: 11px; color: var(--sub); font-weight: 400; }
+  .chip { font-size: 10px; padding: 3px 8px; border-radius: 10px; color: #fff; white-space: nowrap; flex-shrink: 0; }
+  .aid-card .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 10px; margin-top: 8px; font-size: 12px; }
+  @media (min-width: 560px) { .aid-card .meta { grid-template-columns: repeat(4, 1fr); } }
+  .meta .k { color: var(--sub); font-size: 10px; display: block; }
+  .meta .v { font-weight: 600; }
+
+  /* 詳細 */
+  #detailHead { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  #detailHead .top { display: flex; align-items: center; gap: 10px; }
+  #detailHead .aid-no { width: 40px; height: 40px; font-size: 18px; }
+  #detailHead h2 { margin: 0; font-size: 19px; }
+  #detailHead .kms { font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .subtabs { display: flex; background: #e9ecea; border-radius: 10px; padding: 3px; margin-bottom: 10px; position: sticky; top: 0; z-index: 5; }
+  .subtab { flex: 1; border: none; background: none; padding: 9px 2px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #555; cursor: pointer; }
+  .subtab.active { background: #fff; color: var(--theme); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .card h3 { font-size: 13px; margin: 0 0 8px; color: #444; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .card h3 .note { font-weight: 400; font-size: 11px; color: var(--sub); }
+
+  table.times { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.times th, table.times td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: center; }
+  table.times th { color: var(--sub); font-weight: 600; font-size: 11px; }
+  table.times td:first-child, table.times th:first-child { text-align: left; }
+  table.times td.t { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+  .status-group { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .status-btn { padding: 10px 2px; border-radius: 8px; border: 2px solid #ddd; background: #fff; font-size: 12px; font-weight: 700; color: #777; cursor: pointer; }
+  .status-btn.sel { color: #fff; }
+
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 4px; }
+  .input { width: 100%; padding: 10px; border: 1px solid #d5d9d7; border-radius: 8px; font-size: 15px; font-family: inherit; background: #fff; }
+  textarea.input { resize: vertical; min-height: 64px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .three { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; }
+
+  .btn { border: none; border-radius: 10px; padding: 12px 14px; font-size: 14px; font-weight: 700; cursor: pointer; background: var(--theme); color: #fff; }
+  .btn:active { filter: brightness(0.92); }
+  .btn:disabled { opacity: 0.5; }
+  .btn.block { width: 100%; }
+  .btn.ghost { background: #fff; color: var(--theme); border: 1px solid var(--theme); }
+  .btn.pink { background: var(--pink); }
+  .btn.small { padding: 7px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.danger-ghost { background: #fff; color: var(--danger); border: 1px solid var(--danger); }
+
+  .stepper { display: flex; align-items: center; gap: 8px; }
+  .stepper button { width: 44px; height: 44px; border-radius: 50%; border: 1px solid #ccc; background: #fff; font-size: 22px; font-weight: 700; color: var(--theme); cursor: pointer; }
+  .stepper .num { font-size: 26px; font-weight: 800; min-width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
+  .stepper .of { font-size: 13px; color: var(--sub); }
+
+  .tel-link { display: inline-block; margin-top: 4px; font-size: 13px; color: var(--theme); font-weight: 700; text-decoration: none; }
+
+  /* 提供エイド */
+  .menu-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-item .mi-main { flex: 1; min-width: 0; }
+  .menu-item .mi-name { font-weight: 700; font-size: 14px; }
+  .menu-item .mi-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .menu-item .mi-qty { text-align: right; font-size: 12px; white-space: nowrap; }
+  .menu-item .mi-qty b { font-size: 16px; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--pink-light); color: var(--pink-dark); font-weight: 700; margin-right: 4px; }
+  .warn-text { color: var(--warn); font-weight: 700; }
+  .icon-btn { border: none; background: none; color: #aaa; font-size: 18px; cursor: pointer; padding: 2px 4px; }
+
+  /* カウンター */
+  .counter-big { text-align: center; padding: 6px 0 4px; }
+  .counter-big .n { font-size: 56px; font-weight: 900; color: var(--theme-dark); line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .counter-big .of { font-size: 12px; color: var(--sub); }
+  .count-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .count-btns .btn { padding: 18px 0; font-size: 20px; border-radius: 14px; }
+  .count-btns .plus1 { grid-column: span 3; padding: 26px 0; font-size: 30px; background: var(--pink); }
+  .count-btns .minus { background: #fff; color: var(--danger); border: 1px solid #f0b3b3; }
+  .pending-note { text-align: center; font-size: 11px; color: var(--warn); margin-top: 6px; min-height: 14px; }
+  .chart-wrap { width: 100%; overflow-x: auto; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #555; margin-top: 6px; }
+
+  /* 備品 */
+  .progress { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+  .progress > div { height: 100%; background: var(--theme); transition: width 0.3s; }
+  .check-item { display: flex; align-items: center; gap: 10px; padding: 11px 2px; border-bottom: 1px solid var(--line); cursor: pointer; user-select: none; }
+  .check-item:last-child { border-bottom: none; }
+  .check-box { width: 26px; height: 26px; border-radius: 7px; border: 2px solid #bbb; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; font-weight: 900; }
+  .check-item.done .check-box { background: var(--theme); border-color: var(--theme); }
+  .check-item.done .ci-name { color: #999; text-decoration: line-through; }
+  .ci-main { flex: 1; min-width: 0; }
+  .ci-name { font-size: 14px; font-weight: 600; }
+  .ci-sub { font-size: 10px; color: var(--sub); }
+  .ci-qty { font-size: 12px; color: #555; white-space: nowrap; }
+
+  .qr-box { display: flex; gap: 12px; align-items: center; }
+  .qr-box #qr img, .qr-box #qr canvas { width: 108px; height: 108px; }
+  .url-text { font-size: 11px; color: var(--sub); word-break: break-all; }
+
+  /* 地図 */
+  .aid-marker {
+    width: 30px; height: 30px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,0.45);
+  }
+  .sg-marker { background: #c62828; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 5px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+  #mapLegend {
+    position: absolute; right: 10px; bottom: 10px; z-index: 500; background: rgba(255,255,255,0.95);
+    border-radius: 10px; padding: 8px 10px; font-size: 11px; line-height: 1.8; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  #toast {
+    position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%) translateY(20px); background: #323232; color: #fff;
+    padding: 11px 18px; border-radius: 8px; font-size: 13px; z-index: 3000; opacity: 0; transition: all 0.25s;
+    pointer-events: none; max-width: 88%; text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.error { background: var(--danger); }
+  #loading { position: fixed; inset: 0; background: #fff; z-index: 5000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #666; font-size: 13px; transition: opacity 0.3s; }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .spinner { width: 40px; height: 40px; border: 4px solid #eee; border-top-color: var(--theme); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  .demo-banner { background: #fff3e0; color: #8a4b00; border: 1px solid #ffcc80; border-radius: 10px; padding: 8px 10px; font-size: 12px; margin-bottom: 10px; }
+  .muted { color: var(--sub); font-size: 12px; }
+  .empty { text-align: center; color: #999; font-size: 13px; padding: 16px 0; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <button class="hbtn" id="backBtn" title="一覧へ">‹ 一覧</button>
+  <div class="titles">
+    <h1 id="headerTitle">エイド運営管理</h1>
+    <div class="subtitle">東北風土マラソン2027 <span id="syncBadge"></span></div>
+  </div>
+  <button class="hbtn" id="refreshBtn" title="再読み込み">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+  </button>
+</div>
+
+<div id="main">
+  <div class="view active" id="view-list"></div>
+  <div class="view" id="view-map"><div id="map"></div><div id="mapLegend"></div></div>
+  <div class="view" id="view-settings"></div>
+  <div class="view" id="view-detail"></div>
+</div>
+
+<nav id="tabbar">
+  <button class="tab active" data-view="list"><span class="ico">📋</span>エイド一覧</button>
+  <button class="tab" data-view="map"><span class="ico">🗺️</span>地図</button>
+  <button class="tab" data-view="settings"><span class="ico">⚙️</span>設定</button>
+</nav>
+
+<div id="toast"></div>
+<div id="loading"><div class="spinner"></div>データを読み込み中...</div>
+
+<script>
+// =============================================================================
+// 設定
+// =============================================================================
+
+// Code.gs をウェブアプリとしてデプロイしたURL。未設定のときはデモデータで動作する。
+const API_URL = 'https://script.google.com/macros/s/AKfycbwNfaYpSE7GU1bcmFq8rEM5Pen4vpMAsM8gRLnLrxqS8h9bfomicIeBuNrdNIdU-BkB/exec';
+
+// 2026年ハーフのGPX(長沼1周)を間引いたコースライン。フルはこれを2周。
+const COURSE = [[38.69226,141.13514],[38.69249,141.13658],[38.69187,141.13677],[38.69071,141.13734],[38.69048,141.13779],[38.69055,141.13807],[38.69072,141.13819],[38.69109,141.13825],[38.69149,141.13894],[38.6921,141.13948],[38.69258,141.1402],[38.69371,141.14093],[38.6938,141.14112],[38.69386,141.14151],[38.69411,141.14194],[38.69508,141.14279],[38.69522,141.1428],[38.69532,141.1427],[38.69544,141.1421],[38.69554,141.14191],[38.69593,141.1418],[38.69615,141.14181],[38.69639,141.14193],[38.69689,141.14239],[38.69696,141.14259],[38.69697,141.14306],[38.69716,141.14332],[38.69817,141.14335],[38.69846,141.14343],[38.69854,141.14356],[38.69849,141.1438],[38.69801,141.14407],[38.69792,141.1442],[38.6981,141.1449],[38.69785,141.14552],[38.69787,141.14566],[38.69813,141.14578],[38.69851,141.14556],[38.69891,141.14549],[38.69913,141.14564],[38.6994,141.14604],[38.70006,141.14622],[38.70044,141.14645],[38.70052,141.14659],[38.70048,141.14685],[38.70001,141.14732],[38.69944,141.1481],[38.69865,141.14804],[38.69799,141.14777],[38.69758,141.14737],[38.69693,141.14698],[38.69602,141.14623],[38.69466,141.14602],[38.6945,141.14585],[38.69414,141.14503],[38.69403,141.14494],[38.69385,141.14498],[38.69374,141.14516],[38.69364,141.14568],[38.69336,141.14604],[38.69337,141.1463],[38.69368,141.14677],[38.69408,141.14711],[38.69462,141.14794],[38.6948,141.14805],[38.69523,141.14793],[38.6954,141.14803],[38.69612,141.1492],[38.69612,141.14937],[38.69595,141.14969],[38.6955,141.15022],[38.6954,141.15071],[38.6951,141.15125],[38.69513,141.15148],[38.69524,141.15166],[38.69536,141.15172],[38.69591,141.15165],[38.69647,141.1519],[38.69686,141.15188],[38.69695,141.15164],[38.69688,141.15079],[38.69694,141.1503],[38.69704,141.15009],[38.69721,141.15005],[38.69767,141.15046],[38.69785,141.15083],[38.69814,141.1512],[38.6983,141.15166],[38.69846,141.15175],[38.69876,141.15171],[38.69894,141.15179],[38.69975,141.1529],[38.69995,141.153],[38.7003,141.15276],[38.70065,141.15231],[38.70088,141.15172],[38.7012,141.15127],[38.70135,141.15059],[38.70146,141.15038],[38.70223,141.15032],[38.70273,141.15046],[38.70284,141.15057],[38.70293,141.15082],[38.70289,141.15119],[38.70247,141.15159],[38.7019,141.1525],[38.70148,141.15303],[38.70116,141.15389],[38.70108,141.15452],[38.70061,141.15517],[38.70068,141.15548],[38.70107,141.15592],[38.70166,141.15596],[38.70203,141.1557],[38.7021,141.1555],[38.70201,141.155],[38.70204,141.15478],[38.70218,141.15449],[38.70236,141.15436],[38.70269,141.15436],[38.7031,141.1546],[38.70344,141.15457],[38.70363,141.15449],[38.70408,141.15396],[38.70448,141.15367],[38.70487,141.15369],[38.70493,141.15384],[38.70509,141.15391],[38.70564,141.15382],[38.70681,141.1539],[38.70738,141.15373],[38.70787,141.1534],[38.70823,141.153],[38.7085,141.15255],[38.71149,141.14568],[38.71119,141.1452],[38.71087,141.14367],[38.71073,141.1435],[38.71026,141.14318],[38.71007,141.14266],[38.70955,141.14185],[38.70934,141.14137],[38.70869,141.14072],[38.70831,141.14011],[38.70789,141.13964],[38.70772,141.13957],[38.70752,141.13964],[38.70711,141.14006],[38.70691,141.14006],[38.70643,141.13913],[38.70581,141.13822],[38.70434,141.1368],[38.70346,141.13626],[38.7031,141.13587],[38.70276,141.13536],[38.70242,141.13457],[38.70205,141.13413],[38.70202,141.13401],[38.70203,141.13357],[38.70237,141.13322],[38.70244,141.13307],[38.70246,141.13252],[38.7024,141.13224],[38.70159,141.13198],[38.70124,141.13162],[38.7011,141.13174],[38.70104,141.13222],[38.70088,141.13252],[38.70072,141.13254],[38.70059,141.13245],[38.70017,141.13174],[38.69982,141.13042],[38.69967,141.1303],[38.69939,141.13033],[38.69923,141.13022],[38.69866,141.12902],[38.69833,141.12851],[38.69783,141.1274],[38.69734,141.12701],[38.69696,141.1264],[38.69686,141.12611],[38.69688,141.12564],[38.69682,141.1254],[38.69664,141.12524],[38.6961,141.1252],[38.69591,141.12505],[38.6959,141.12481],[38.69608,141.12437],[38.69605,141.12422],[38.69538,141.12396],[38.69498,141.124],[38.69477,141.12382],[38.6947,141.12287],[38.69478,141.12211],[38.69448,141.12131],[38.69425,141.12109],[38.6936,141.1211],[38.69341,141.12095],[38.69335,141.12081],[38.69329,141.12055],[38.69332,141.12027],[38.6938,141.12002],[38.69394,141.11983],[38.69394,141.11969],[38.69388,141.11954],[38.69365,141.11932],[38.69343,141.11884],[38.69305,141.11848],[38.69291,141.11821],[38.69288,141.11775],[38.69297,141.11709],[38.69282,141.11646],[38.69289,141.11593],[38.69283,141.11561],[38.69258,141.1151],[38.6927,141.11461],[38.6929,141.11421],[38.69315,141.11389],[38.69351,141.11383],[38.69395,141.11407],[38.69405,141.11402],[38.69408,141.11387],[38.69389,141.11329],[38.69372,141.11312],[38.69264,141.11293],[38.69251,141.11282],[38.6925,141.11257],[38.69276,141.11194],[38.6928,141.11161],[38.69272,141.11148],[38.69239,141.11142],[38.69222,141.11125],[38.69175,141.11006],[38.69178,141.10978],[38.69191,141.10957],[38.69239,141.1095],[38.69256,141.10937],[38.69261,141.10858],[38.69293,141.10774],[38.69292,141.10754],[38.6928,141.10737],[38.69254,141.10738],[38.69186,141.1082],[38.69131,141.10826],[38.69101,141.10818],[38.69073,141.10784],[38.69054,141.10724],[38.69054,141.10695],[38.69063,141.10655],[38.69053,141.10642],[38.6901,141.10662],[38.68961,141.10666],[38.68776,141.10642],[38.68749,141.10653],[38.68725,141.10685],[38.6869,141.1088],[38.68676,141.10901],[38.68627,141.10945],[38.68616,141.10966],[38.6861,141.1101],[38.68615,141.11016],[38.68667,141.1099],[38.68742,141.11019],[38.68783,141.11047],[38.68794,141.11066],[38.68841,141.1125],[38.68846,141.11298],[38.68831,141.11334],[38.68782,141.11384],[38.68721,141.11399],[38.68706,141.11428],[38.68711,141.11455],[38.68774,141.11506],[38.68796,141.11544],[38.68796,141.11576],[38.68761,141.11634],[38.68768,141.11668],[38.68807,141.11761],[38.68807,141.11809],[38.68793,141.11848],[38.68769,141.11861],[38.68747,141.11859],[38.68611,141.11775],[38.68591,141.11747],[38.68567,141.11677],[38.68551,141.11647],[38.68372,141.11461],[38.68363,141.11425],[38.68371,141.11376],[38.68347,141.11381],[38.68315,141.11427],[38.68175,141.11588],[38.67987,141.11673],[38.67986,141.11685],[38.68014,141.11703],[38.68021,141.11721],[38.68018,141.11781],[38.6801,141.11806],[38.67985,141.11827],[38.67909,141.11823],[38.67896,141.1184],[38.67894,141.11857],[38.67916,141.11986],[38.67947,141.12054],[38.67979,141.12147],[38.68054,141.12195],[38.68163,141.12223],[38.68191,141.12238],[38.6821,141.12261],[38.68211,141.12276],[38.68202,141.123],[38.68165,141.12321],[38.68138,141.1232],[38.6809,141.12296],[38.68067,141.12299],[38.68044,141.12318],[38.6802,141.12355],[38.67989,141.12372],[38.67983,141.12386],[38.68021,141.12656],[38.68046,141.12795],[38.68069,141.12848],[38.68143,141.12965],[38.6816,141.12974],[38.68188,141.12946],[38.68257,141.1283],[38.68277,141.12815],[38.68291,141.12816],[38.6831,141.12829],[38.68319,141.12857],[38.68303,141.12977],[38.68312,141.13001],[38.68329,141.13006],[38.68364,141.12968],[38.68381,141.12906],[38.68431,141.12878],[38.68436,141.1286],[38.68432,141.12808],[38.6844,141.12794],[38.68456,141.12788],[38.68478,141.12806],[38.68496,141.12927],[38.68512,141.12938],[38.68588,141.1282],[38.68607,141.1281],[38.68643,141.12814],[38.68666,141.12808],[38.68715,141.12737],[38.68734,141.12726],[38.68748,141.12728],[38.68756,141.12742],[38.68753,141.12755],[38.68687,141.12885],[38.68659,141.12924],[38.68655,141.12933],[38.68659,141.12949],[38.68684,141.12966],[38.68762,141.1296],[38.68816,141.12921],[38.68841,141.12867],[38.68861,141.12854],[38.68974,141.12887],[38.69021,141.12934],[38.69078,141.12968],[38.69079,141.1299],[38.6906,141.13004],[38.68982,141.13032],[38.68856,141.13099],[38.68789,141.13118],[38.68821,141.13173],[38.68844,141.13192],[38.68876,141.13204],[38.68909,141.13195],[38.69009,141.13143],[38.69032,141.13151],[38.69039,141.13171],[38.6904,141.13253],[38.69059,141.13267],[38.69127,141.13262],[38.69143,141.13277],[38.69183,141.13344],[38.69178,141.13382],[38.69116,141.13425],[38.69092,141.1347],[38.69114,141.1347],[38.6921,141.13436],[38.69233,141.13545]];
+const START_GOAL = { lat: 38.692438, lng: 141.135438 };
+const MAP_ZOOM = 14;
+
+const STATUS = {
+  preparing: { label: '準備中', color: '#9e9e9e' },
+  ready:     { label: '設営完了', color: '#1565c0' },
+  open:      { label: '営業中', color: '#1f8a4c' },
+  closed:    { label: '撤収完了', color: '#424242' }
+};
+const STATUS_ORDER = ['preparing', 'ready', 'open', 'closed'];
+
+const TARGETS = {
+  all:   'フル・ハーフ全員',
+  full:  'フル(1・2周目)',
+  full1: 'フル1周目のみ',
+  full2: 'フル2周目のみ',
+  half:  'ハーフのみ'
+};
+
+const PASS_COLORS = { full1: '#ea6d9a', full2: '#a8355e', half: '#f5b3cb' };
+const BIN = 10; // 分
+
+// =============================================================================
+// 状態
+// =============================================================================
+
+const isDemo = !API_URL || API_URL.indexOf('YOUR_GAS') === 0;
+let data = { aids: [], menu: [], checklist: [], settings: {}, counts: {} };
+let currentView = 'list';
+let currentAidId = null;
+let detailTab = 'overview';
+let map = null, aidMarkers = {};
+let pending = loadPending();
+let flushing = false;
+
+function lsGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function loadPending() { try { return JSON.parse(lsGet('tfm_aid_pending', '[]')) || []; } catch (e) { return []; } }
+function savePending() { lsSet('tfm_aid_pending', JSON.stringify(pending)); }
+function staffName() { return lsGet('tfm_aid_staff', ''); }
+
+// =============================================================================
+// 通信 (JSONP)
+// =============================================================================
+
+function jsonp(params) {
+  if (isDemo) return demoApi(params);
+  return new Promise(function (resolve, reject) {
+    const cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const script = document.createElement('script');
+    let done = false;
+    window[cb] = function (res) { done = true; cleanup(); res && res.success ? resolve(res) : reject(new Error((res && res.error) || 'エラーが発生しました')); };
+    function cleanup() { delete window[cb]; if (script.parentNode) script.parentNode.removeChild(script); }
+    script.onerror = function () { if (!done) { cleanup(); reject(new Error('通信に失敗しました')); } };
+    setTimeout(function () { if (!done) { cleanup(); reject(new Error('通信がタイムアウトしました')); } }, 20000);
+    const qs = new URLSearchParams(params);
+    qs.set('callback', cb);
+    script.src = API_URL + '?' + qs.toString();
+    document.body.appendChild(script);
+  });
+}
+
+async function loadAll() {
+  const res = await jsonp({ action: 'getAll' });
+  data = { aids: res.aids || [], menu: res.menu || [], checklist: res.checklist || [], settings: res.settings || {}, counts: res.counts || {} };
+}
+
+async function refreshCounts() {
+  try {
+    const res = await jsonp({ action: 'getCounts' });
+    data.counts = res.counts || {};
+    if (currentView === 'detail' && detailTab === 'count') renderCountPanel();
+    if (currentView === 'list') renderList();
+  } catch (e) { /* 次回に再試行 */ }
+}
+
+// =============================================================================
+// 予想時刻・通過人数の計算
+// =============================================================================
+
+function hmToMin(s) {
+  s = String(s || '');
+  const iso = s.match(/T(\d\d):(\d\d)/);           // シートで時刻に変換された場合の保険
+  if (iso) { const d = new Date(s); return d.getHours() * 60 + d.getMinutes(); }
+  const m = s.match(/(\d+):(\d+)/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+}
+function paceToMin(s) { const m = String(s || '').match(/(\d+):(\d+)/); return m ? Number(m[1]) + Number(m[2]) / 60 : Number(s) || 0; }
+function minToHM(min) {
+  if (!isFinite(min)) return '--:--';
+  min = Math.round(min);
+  const h = Math.floor(min / 60), m = ((min % 60) + 60) % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+function paceStr(p) { const s = Math.round(p * 60); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+
+function S(k, d) { const v = data.settings[k]; return v === undefined || v === '' ? d : v; }
+function lapKm() { return Number(S('lap_km', 21.0975)) || 21.0975; }
+
+function catParams(cat) {
+  const dist = Number(S(cat + '_distance', cat === 'full' ? 42.195 : 21.0975));
+  const limit = hmToMin(S(cat + '_limit', cat === 'full' ? '6:30' : '3:30'));
+  return {
+    entries: Number(S(cat + '_entries', cat === 'full' ? 1500 : 3000)) || 0,
+    rate: Number(S('start_rate', 0.9)) || 0.9,
+    from: hmToMin(S(cat + '_start_from', cat === 'full' ? '08:30' : '09:00')),
+    to: hmToMin(S(cat + '_start_to', cat === 'full' ? '09:00' : '11:00')),
+    fast: paceToMin(S(cat + '_fast_pace', cat === 'full' ? '3:05' : '3:10')),
+    mid: paceToMin(S(cat + '_mid_pace', cat === 'full' ? '6:30' : '6:45')),
+    slow: limit / dist,
+    dist: dist
+  };
+}
+
+// 1つのエイドを通過する「回」の一覧(フルは2周するので2回)
+function passesFor(aid) {
+  const km = Number(aid.km) || 0;
+  const list = [
+    { key: 'full1', label: 'フル 1周目', cat: 'full', km: km },
+    { key: 'full2', label: 'フル 2周目', cat: 'full', km: km + lapKm() },
+    { key: 'half',  label: 'ハーフ',     cat: 'half', km: km }
+  ];
+  return list.map(function (p) {
+    const c = catParams(p.cat);
+    return Object.assign(p, {
+      runners: Math.round(c.entries * c.rate),
+      first: c.from + p.km * c.fast,
+      peak: (c.from + c.to) / 2 + p.km * c.mid,
+      last: c.to + p.km * c.slow
+    });
+  });
+}
+
+function aidWindow(aid) {
+  const ps = passesFor(aid);
+  const first = Math.min.apply(null, ps.map(function (p) { return p.first; }));
+  const last = Math.max.apply(null, ps.map(function (p) { return p.last; }));
+  return {
+    first: first, last: last,
+    open: first - Number(S('open_before_min', 30)),
+    close: last + Number(S('close_after_min', 15)),
+    total: ps.reduce(function (s, p) { return s + p.runners; }, 0)
+  };
+}
+
+// スタート時刻(ウェーブ幅で一様)×ペース(先頭〜平均〜制限の三角分布)で通過時刻をシミュレーション
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function triangular(r, a, c, b) {
+  if (b <= a) return a;
+  c = Math.min(Math.max(c, a), b);
+  const u = r(), F = (c - a) / (b - a);
+  return u < F ? a + Math.sqrt(u * (b - a) * (c - a)) : b - Math.sqrt((1 - u) * (b - a) * (b - c));
+}
+const histCache = {};
+function expectedHistogram(aid) {
+  const key = aid.id + '|' + aid.km + '|' + JSON.stringify(data.settings);
+  if (histCache[key]) return histCache[key];
+  const bins = {};
+  const SAMPLES = 800;
+  passesFor(aid).forEach(function (p, idx) {
+    const c = catParams(p.cat);
+    const r = mulberry32(1000 + idx * 7919 + Math.round(p.km * 100));
+    const w = p.runners / SAMPLES;
+    for (let i = 0; i < SAMPLES; i++) {
+      const start = c.from + r() * (c.to - c.from);
+      const t = start + p.km * triangular(r, c.fast, c.mid, c.slow);
+      const b = Math.floor(t / BIN) * BIN;
+      if (!bins[b]) bins[b] = { full1: 0, full2: 0, half: 0 };
+      bins[b][p.key] += w;
+    }
+  });
+  histCache[key] = bins;
+  return bins;
+}
+
+function peakOf(aid) {
+  const bins = expectedHistogram(aid);
+  let best = null, max = 0;
+  Object.keys(bins).forEach(function (b) {
+    const v = bins[b].full1 + bins[b].full2 + bins[b].half;
+    if (v > max) { max = v; best = Number(b); }
+  });
+  return { at: best, per10: Math.round(max) };
+}
+
+function expectedForTarget(target) {
+  const f = catParams('full'), h = catParams('half');
+  const fn = Math.round(f.entries * f.rate), hn = Math.round(h.entries * h.rate);
+  return { all: fn * 2 + hn, full: fn * 2, full1: fn, full2: fn, half: hn }[target] || 0;
+}
+
+// =============================================================================
+// 集計ヘルパー
+// =============================================================================
+
+function aidById(id) { return data.aids.find(function (a) { return String(a.id) === String(id); }); }
+function menuOf(id) { return data.menu.filter(function (m) { return String(m.aid_id) === String(id); }); }
+function checksOf(id) { return data.checklist.filter(function (c) { return String(c.aid_id) === String(id); }); }
+function pendingFor(id) { return pending.filter(function (p) { return p.aid_id === id; }).reduce(function (s, p) { return s + p.delta; }, 0); }
+function countTotal(id) { const c = data.counts[id]; return (c ? Number(c.total) || 0 : 0) + pendingFor(id); }
+function aidKmLabel(aid) {
+  const km = Number(aid.km) || 0;
+  return 'ハーフ ' + km.toFixed(1) + 'km / フル ' + km.toFixed(1) + '・' + (km + lapKm()).toFixed(1) + 'km';
+}
+function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function statusOf(aid) { return STATUS[aid.status] || STATUS.preparing; }
+function aidUrl(id) { return location.origin + location.pathname + '?aid=' + encodeURIComponent(id); }
+
+// =============================================================================
+// 画面: 一覧
+// =============================================================================
+
+function renderList() {
+  const el = document.getElementById('view-list');
+  const aids = data.aids;
+  const volPlanned = aids.reduce(function (s, a) { return s + (Number(a.volunteers_planned) || 0); }, 0);
+  const volIn = aids.reduce(function (s, a) { return s + (Number(a.volunteers_checked_in) || 0); }, 0);
+  const checks = data.checklist.length;
+  const checked = data.checklist.filter(function (c) { return c.checked; }).length;
+  const passTotal = aids.reduce(function (s, a) { return s + countTotal(a.id); }, 0);
+  const passExpected = aids.reduce(function (s, a) { return s + aidWindow(a).total; }, 0);
+  const openCount = aids.filter(function (a) { return a.status === 'open'; }).length;
+  const pct = function (a, b) { return b ? Math.round(a / b * 100) : 0; };
+
+  let html = '';
+  if (isDemo) html += '<div class="demo-banner">デモ表示中です(API_URL未設定)。入力内容は保存されません。</div>';
+  html += '<div class="summary">' +
+    stat('エイド数', aids.length + '<small> か所</small>', '営業中 ' + openCount + ' / 提供品目 ' + data.menu.length) +
+    stat('ボランティア(受付/予定)', volIn + '<small> / ' + volPlanned + '人</small>', null, pct(volIn, volPlanned)) +
+    stat('備品チェック', pct(checked, checks) + '<small>% (' + checked + '/' + checks + ')</small>', null, pct(checked, checks)) +
+    stat('通過人数(全エイド累計)', passTotal.toLocaleString() + '<small> / 予想' + passExpected.toLocaleString() + '</small>', null, pct(passTotal, passExpected)) +
+  '</div>';
+
+  html += '<div class="section-title"><span>エイド一覧(タップで詳細)</span><span class="muted">' + esc(raceSummary()) + '</span></div>';
+  if (!aids.length) html += '<div class="empty">エイドが登録されていません</div>';
+  aids.forEach(function (a) {
+    const st = statusOf(a);
+    const w = aidWindow(a);
+    const ch = checksOf(a.id);
+    const done = ch.filter(function (c) { return c.checked; }).length;
+    html += '<div class="aid-card" data-id="' + esc(a.id) + '" style="border-left-color:' + st.color + '">' +
+      '<div class="row1"><div class="aid-no">' + esc(a.no) + '</div>' +
+      '<div class="name">' + esc(a.name) + '<div class="km">' + esc(aidKmLabel(a)) + '</div></div>' +
+      '<span class="chip" style="background:' + st.color + '">' + st.label + '</span></div>' +
+      '<div class="meta">' +
+        meta('リーダー', a.leader || '未設定') +
+        meta('ボランティア', (Number(a.volunteers_checked_in) || 0) + ' / ' + (a.volunteers_planned === '' ? '-' : a.volunteers_planned) + '人') +
+        meta('先頭〜最後尾', minToHM(w.first) + '〜' + minToHM(w.last)) +
+        meta('備品', done + '/' + ch.length) +
+        meta('提供エイド', menuOf(a.id).length ? menuOf(a.id).map(function (m) { return m.item; }).join('・') : '未登録') +
+        meta('通過(実績/予想)', countTotal(a.id).toLocaleString() + ' / ' + w.total.toLocaleString()) +
+      '</div></div>';
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.aid-card').forEach(function (c) {
+    c.addEventListener('click', function () { openDetail(c.getAttribute('data-id')); });
+  });
+
+  function stat(lbl, val, sub, bar) {
+    return '<div class="stat"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div>' +
+      (sub ? '<div class="muted" style="font-size:10px;margin-top:2px;">' + esc(sub) + '</div>' : '') +
+      (bar !== undefined && bar !== null ? '<div class="bar"><div style="width:' + Math.min(100, bar) + '%"></div></div>' : '') + '</div>';
+  }
+  function meta(k, v) { return '<div><span class="k">' + k + '</span><span class="v">' + esc(v) + '</span></div>'; }
+}
+
+function raceSummary() {
+  const f = catParams('full'), h = catParams('half');
+  return 'フル' + f.entries + '人 / ハーフ' + h.entries + '人で予想';
+}
+
+// =============================================================================
+// 画面: 詳細
+// =============================================================================
+
+function openDetail(id, tab) {
+  if (!aidById(id)) { showToast('エイドが見つかりません: ' + id, true); return; }
+  currentAidId = id;
+  if (tab) detailTab = tab;
+  history.replaceState(null, '', '?aid=' + encodeURIComponent(id));
+  switchView('detail');
+}
+
+function closeDetail() {
+  currentAidId = null;
+  history.replaceState(null, '', location.pathname);
+  switchView('list');
+}
+
+function renderDetail() {
+  const a = aidById(currentAidId);
+  const el = document.getElementById('view-detail');
+  if (!a) { el.innerHTML = '<div class="empty">エイドが見つかりません</div>'; return; }
+  document.getElementById('headerTitle').textContent = a.name;
+  const st = statusOf(a);
+  el.innerHTML =
+    '<div id="detailHead"><div class="top"><div class="aid-no">' + esc(a.no) + '</div>' +
+      '<div style="flex:1;min-width:0"><h2>' + esc(a.name) + '</h2><div class="kms">' + esc(aidKmLabel(a)) + '</div></div>' +
+      '<span class="chip" style="background:' + st.color + '">' + st.label + '</span></div></div>' +
+    '<div class="subtabs">' +
+      ['overview:概要', 'menu:提供エイド', 'count:通過人数', 'check:備品'].map(function (t) {
+        const p = t.split(':');
+        return '<button class="subtab' + (detailTab === p[0] ? ' active' : '') + '" data-tab="' + p[0] + '">' + p[1] + '</button>';
+      }).join('') +
+    '</div>' +
+    '<div class="panel" id="panel-overview"></div>' +
+    '<div class="panel" id="panel-menu"></div>' +
+    '<div class="panel" id="panel-count"></div>' +
+    '<div class="panel" id="panel-check"></div>';
+  el.querySelectorAll('.subtab').forEach(function (b) {
+    b.addEventListener('click', function () { detailTab = b.getAttribute('data-tab'); renderDetail(); });
+  });
+  document.getElementById('panel-' + detailTab).classList.add('active');
+  ({ overview: renderOverviewPanel, menu: renderMenuPanel, count: renderCountPanel, check: renderCheckPanel })[detailTab]();
+}
+
+// --- 概要 ---
+function renderOverviewPanel() {
+  const a = aidById(currentAidId);
+  const el = document.getElementById('panel-overview');
+  const ps = passesFor(a);
+  const w = aidWindow(a);
+  const pk = peakOf(a);
+
+  let html = '<div class="card"><h3>ランナー予想時刻<span class="note">設定タブの条件で自動計算</span></h3>' +
+    '<table class="times"><tr><th>区分</th><th>距離</th><th>先頭</th><th>ピーク</th><th>最後尾</th><th>人数</th></tr>' +
+    ps.map(function (p) {
+      return '<tr><td><span class="legend-dot" style="background:' + PASS_COLORS[p.key] + '"></span>' + p.label + '</td>' +
+        '<td>' + p.km.toFixed(1) + 'km</td><td class="t">' + minToHM(p.first) + '</td><td class="t">' + minToHM(p.peak) +
+        '</td><td class="t">' + minToHM(p.last) + '</td><td>' + p.runners.toLocaleString() + '</td></tr>';
+    }).join('') + '</table>' +
+    '<div class="muted" style="margin-top:8px;line-height:1.6">' +
+      '営業時間の目安: <b>' + minToHM(w.open) + '〜' + minToHM(w.close) + '</b>(先頭' + S('open_before_min', 30) + '分前〜最後尾' + S('close_after_min', 15) + '分後)<br>' +
+      '最も混む時間帯: <b>' + minToHM(pk.at) + '〜' + minToHM(pk.at + BIN) + '</b>(10分で約' + pk.per10.toLocaleString() + '人)<br>' +
+      '通過人数の合計予想: <b>' + w.total.toLocaleString() + '人</b>(フルは2回通過)</div></div>';
+
+  html += '<div class="card"><h3>状況</h3><div class="status-group">' +
+    STATUS_ORDER.map(function (k) {
+      const s = STATUS[k];
+      const sel = a.status === k;
+      return '<button class="status-btn' + (sel ? ' sel' : '') + '" data-st="' + k + '" style="' + (sel ? 'background:' + s.color + ';border-color:' + s.color : '') + '">' + s.label + '</button>';
+    }).join('') + '</div></div>';
+
+  html += '<div class="card"><h3>ボランティア</h3>' +
+    '<div class="field"><label>受付済み人数(当日タップで増減)</label><div class="stepper">' +
+      '<button data-vd="-1">−</button><div class="num" id="volIn">' + (Number(a.volunteers_checked_in) || 0) + '</div><button data-vd="1">＋</button>' +
+      '<div class="of">/ 予定 ' + (a.volunteers_planned === '' ? '-' : esc(a.volunteers_planned)) + '人</div></div></div>' +
+    '<div class="two"><div class="field"><label>活動予定人数</label><input class="input" type="number" inputmode="numeric" id="fPlanned" value="' + esc(a.volunteers_planned) + '"></div>' +
+      '<div class="field"><label>エイド名</label><input class="input" id="fName" value="' + esc(a.name) + '"></div></div>' +
+    '<div class="two"><div class="field"><label>リーダー名</label><input class="input" id="fLeader" value="' + esc(a.leader) + '" placeholder="氏名"></div>' +
+      '<div class="field"><label>リーダー連絡先</label><input class="input" type="tel" id="fTel" value="' + esc(a.leader_tel) + '" placeholder="090-">' +
+      (a.leader_tel ? '<a class="tel-link" href="tel:' + esc(String(a.leader_tel).replace(/[^\d+]/g, '')) + '">📞 電話をかける</a>' : '') + '</div></div>' +
+    '<div class="field"><label>サブリーダー</label><input class="input" id="fSub" value="' + esc(a.sub_leader) + '" placeholder="氏名・連絡先"></div>' +
+    '<div class="two"><div class="field"><label>給水内容</label><input class="input" id="fWater" value="' + esc(a.water) + '"></div>' +
+      '<div class="field"><label>スタートからの距離(km・1周)</label><input class="input" type="number" step="0.1" inputmode="decimal" id="fKm" value="' + esc(a.km) + '"></div></div>' +
+    '<div class="field"><label>メモ(設営場所・注意事項など)</label><textarea class="input" id="fMemo">' + esc(a.memo) + '</textarea></div>' +
+    '<button class="btn block" id="saveAidBtn">保存する</button></div>';
+
+  html += '<div class="card"><h3>このエイド専用ページ<span class="note">リーダーに共有</span></h3><div class="qr-box"><div id="qr"></div>' +
+    '<div style="flex:1;min-width:0"><div class="url-text">' + esc(aidUrl(a.id)) + '</div>' +
+    '<button class="btn small ghost" id="copyUrlBtn" style="margin-top:8px">URLをコピー</button>' +
+    ' <a class="btn small ghost" style="margin-top:8px;display:inline-block;text-decoration:none" target="_blank" href="https://www.google.com/maps?q=' + a.lat + ',' + a.lng + '">Googleマップ</a></div></div></div>';
+
+  el.innerHTML = html;
+
+  el.querySelectorAll('.status-btn').forEach(function (b) {
+    b.addEventListener('click', function () { saveAid({ status: b.getAttribute('data-st') }, '状況を「' + STATUS[b.getAttribute('data-st')].label + '」にしました'); });
+  });
+  el.querySelectorAll('[data-vd]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const d = Number(b.getAttribute('data-vd'));
+      const cur = Number(a.volunteers_checked_in) || 0;
+      if (cur + d < 0) return;
+      a.volunteers_checked_in = cur + d;
+      document.getElementById('volIn').textContent = a.volunteers_checked_in;
+      jsonp({ action: 'updateAid', id: a.id, delta_checked_in: d }).then(function (res) {
+        if (res.aid) Object.assign(a, res.aid);
+        document.getElementById('volIn').textContent = Number(a.volunteers_checked_in) || 0;
+      }).catch(function (e) { a.volunteers_checked_in = cur; document.getElementById('volIn').textContent = cur; showToast(e.message, true); });
+    });
+  });
+  document.getElementById('saveAidBtn').addEventListener('click', function () {
+    saveAid({
+      name: val('fName'), volunteers_planned: val('fPlanned'), leader: val('fLeader'), leader_tel: val('fTel'),
+      sub_leader: val('fSub'), water: val('fWater'), km: val('fKm'), memo: val('fMemo')
+    }, '保存しました', this);
+  });
+  document.getElementById('copyUrlBtn').addEventListener('click', function () { copyText(aidUrl(a.id)); });
+  try { if (window.QRCode) new QRCode(document.getElementById('qr'), { text: aidUrl(a.id), width: 216, height: 216, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+
+async function saveAid(fields, msg, btn) {
+  const a = aidById(currentAidId);
+  if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+  try {
+    const res = await jsonp(Object.assign({ action: 'updateAid', id: a.id }, fields));
+    Object.assign(a, res.aid || fields);
+    showToast(msg);
+    renderDetail();
+  } catch (e) {
+    showToast(e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = '保存する'; }
+  }
+}
+
+// --- 提供エイド ---
+function renderMenuPanel() {
+  const a = aidById(currentAidId);
+  const el = document.getElementById('panel-menu');
+  const items = menuOf(a.id);
+  let html = '<div class="card"><h3>提供するもの<span class="note">' + items.length + '品目</span></h3>';
+  if (!items.length) html += '<div class="empty">まだ登録されていません</div>';
+  items.forEach(function (m) {
+    const need = expectedForTarget(m.target || 'all');
+    const qty = Number(m.qty) || 0;
+    const short = qty && qty < need;
+    html += '<div class="menu-item"><div class="mi-main"><div class="mi-name">' + esc(m.item) + '</div>' +
+      '<div class="mi-sub"><span class="tag">' + esc(TARGETS[m.target] || TARGETS.all) + '</span>' + (m.provider ? '提供: ' + esc(m.provider) : '') + (m.memo ? ' / ' + esc(m.memo) : '') + '</div></div>' +
+      '<div class="mi-qty"><b>' + (qty ? qty.toLocaleString() : '-') + '</b>' + esc(m.unit) + '<br><span class="' + (short ? 'warn-text' : 'muted') + '">予想 ' + need.toLocaleString() + '人分</span></div>' +
+      '<button class="icon-btn" data-del="' + esc(m.id) + '" title="削除">×</button></div>';
+  });
+  html += '</div>';
+
+  html += '<div class="card"><h3>提供品を追加</h3>' +
+    '<div class="field"><label>品名</label><input class="input" id="mItem" placeholder="例: 仙台牛の串焼き"></div>' +
+    '<div class="field"><label>提供者・協賛</label><input class="input" id="mProvider" placeholder="例: 〇〇商店"></div>' +
+    '<div class="three"><div class="field"><label>対象</label><select class="input" id="mTarget">' +
+      Object.keys(TARGETS).map(function (k) { return '<option value="' + k + '">' + TARGETS[k] + '</option>'; }).join('') +
+    '</select></div><div class="field"><label>準備数</label><input class="input" type="number" inputmode="numeric" id="mQty"></div>' +
+    '<div class="field"><label>単位</label><input class="input" id="mUnit" value="食"></div></div>' +
+    '<div class="field"><label>メモ</label><input class="input" id="mMemo" placeholder="アレルギー表示・提供方法など"></div>' +
+    '<div class="muted" id="mNeed" style="margin-bottom:8px"></div>' +
+    '<button class="btn block pink" id="addMenuBtn">追加する</button></div>';
+  el.innerHTML = html;
+
+  const updNeed = function () { document.getElementById('mNeed').textContent = 'この対象の予想通過人数: 約' + expectedForTarget(val('mTarget')).toLocaleString() + '人'; };
+  document.getElementById('mTarget').addEventListener('change', updNeed); updNeed();
+
+  el.querySelectorAll('[data-del]').forEach(function (b) {
+    b.addEventListener('click', async function () {
+      if (!confirm('この提供品を削除しますか？')) return;
+      try {
+        await jsonp({ action: 'deleteMenu', id: b.getAttribute('data-del') });
+        data.menu = data.menu.filter(function (m) { return m.id !== b.getAttribute('data-del'); });
+        showToast('削除しました'); renderMenuPanel();
+      } catch (e) { showToast(e.message, true); }
+    });
+  });
+  document.getElementById('addMenuBtn').addEventListener('click', async function () {
+    const item = val('mItem');
+    if (!item) { showToast('品名を入力してください', true); return; }
+    const btn = this; btn.disabled = true;
+    const rec = { aid_id: a.id, item: item, provider: val('mProvider'), target: val('mTarget'), qty: val('mQty'), unit: val('mUnit'), memo: val('mMemo') };
+    try {
+      const res = await jsonp(Object.assign({ action: 'addMenu' }, rec));
+      data.menu.push(Object.assign({ id: res.id }, rec));
+      showToast('追加しました'); renderMenuPanel();
+    } catch (e) { showToast(e.message, true); btn.disabled = false; }
+  });
+}
+
+// --- 通過人数 ---
+function renderCountPanel() {
+  const a = aidById(currentAidId);
+  const el = document.getElementById('panel-count');
+  if (!el) return;
+  const total = countTotal(a.id);
+  const w = aidWindow(a);
+  const myPending = pendingFor(a.id);
+  el.innerHTML =
+    '<div class="card"><div class="counter-big"><div class="n" id="countNum">' + total.toLocaleString() + '</div>' +
+      '<div class="of">通過人数の累計 / 予想 ' + w.total.toLocaleString() + '人(' + (w.total ? Math.round(total / w.total * 100) : 0) + '%)</div></div>' +
+      '<div class="count-btns">' +
+        '<button class="btn plus1" data-c="1">＋1</button>' +
+        '<button class="btn" data-c="5">＋5</button><button class="btn" data-c="10">＋10</button><button class="btn minus" data-c="-1">−1</button>' +
+      '</div><div class="pending-note" id="pendingNote">' + (myPending ? '未送信 ' + myPending + '人分(自動で送信します)' : '') + '</div>' +
+      '<div class="field" style="margin-top:8px"><label>カウント担当者名(この端末に保存)</label><input class="input" id="staffInput" value="' + esc(staffName()) + '" placeholder="氏名"></div>' +
+    '</div>' +
+    '<div class="card"><h3>10分ごとの通過人数<span class="note">棒=予想 / 線=実績</span></h3><div class="chart-wrap" id="chart"></div>' +
+      '<div class="chart-legend"><span><span class="legend-dot" style="background:' + PASS_COLORS.full1 + '"></span>フル1周目</span>' +
+      '<span><span class="legend-dot" style="background:' + PASS_COLORS.full2 + '"></span>フル2周目</span>' +
+      '<span><span class="legend-dot" style="background:' + PASS_COLORS.half + '"></span>ハーフ</span>' +
+      '<span><span class="legend-dot" style="background:#146236"></span>実績</span></div></div>' +
+    '<div class="card"><h3>時間帯別(予想と実績)</h3><div id="binTable"></div></div>';
+
+  el.querySelectorAll('[data-c]').forEach(function (b) {
+    b.addEventListener('click', function () { tapCount(a.id, Number(b.getAttribute('data-c'))); });
+  });
+  document.getElementById('staffInput').addEventListener('change', function () { lsSet('tfm_aid_staff', this.value.trim()); });
+  drawChart(a);
+}
+
+function tapCount(aidId, delta) {
+  if (countTotal(aidId) + delta < 0) return;
+  pending.push({ aid_id: aidId, delta: delta, ts: Date.now() });
+  savePending();
+  if (navigator.vibrate) { try { navigator.vibrate(15); } catch (e) {} }
+  const n = document.getElementById('countNum');
+  if (n) n.textContent = countTotal(aidId).toLocaleString();
+  const note = document.getElementById('pendingNote');
+  if (note) note.textContent = '未送信 ' + pendingFor(aidId) + '人分(自動で送信します)';
+  updateSyncBadge();
+  scheduleFlush();
+}
+
+let flushTimer = null;
+function scheduleFlush() { if (!flushTimer) flushTimer = setTimeout(function () { flushTimer = null; flushPending(); }, 1500); }
+
+// 端末に溜めたタップをエイドごとにまとめて送る(電波が悪くても失われない)
+async function flushPending() {
+  if (flushing || !pending.length) return;
+  flushing = true;
+  try {
+    while (pending.length) {
+      const aid = pending[0].aid_id;
+      const batch = pending.filter(function (p) { return p.aid_id === aid; });
+      const delta = batch.reduce(function (s, p) { return s + p.delta; }, 0);
+      const ts = batch[batch.length - 1].ts;
+      if (delta !== 0) await jsonp({ action: 'addCount', aid_id: aid, delta: delta, ts: ts, by: staffName() });
+      pending = pending.filter(function (p) { return batch.indexOf(p) === -1; });
+      savePending();
+      if (!data.counts[aid]) data.counts[aid] = { total: 0, bins: {} };
+      data.counts[aid].total = (Number(data.counts[aid].total) || 0) + delta;
+      const d = new Date(ts), b = Math.floor((d.getHours() * 60 + d.getMinutes()) / BIN) * BIN;
+      const k = minToHM(b);
+      data.counts[aid].bins[k] = (data.counts[aid].bins[k] || 0) + delta;
+    }
+  } catch (e) {
+    setTimeout(scheduleFlush, 8000);   // 通信できなければ8秒後に再送
+  } finally {
+    flushing = false;
+    updateSyncBadge();
+    const note = document.getElementById('pendingNote');
+    if (note && currentAidId) note.textContent = pendingFor(currentAidId) ? '未送信 ' + pendingFor(currentAidId) + '人分(自動で送信します)' : '';
+    if (currentView === 'detail' && detailTab === 'count' && document.getElementById('chart')) drawChart(aidById(currentAidId));
+  }
+}
+
+function updateSyncBadge() {
+  const n = pending.reduce(function (s, p) { return s + Math.abs(p.delta); }, 0);
+  const b = document.getElementById('syncBadge');
+  b.style.display = n ? 'inline-block' : 'none';
+  b.textContent = '未送信 ' + n;
+}
+
+function drawChart(a) {
+  const exp = expectedHistogram(a);
+  const actual = (data.counts[a.id] && data.counts[a.id].bins) || {};
+  const w = aidWindow(a);
+  let start = Math.floor(w.open / BIN) * BIN, end = Math.ceil(w.close / BIN) * BIN;
+  Object.keys(actual).forEach(function (k) { const m = hmToMin(k); if (m < start) start = m; if (m > end) end = m; });
+  const bins = [];
+  for (let m = start; m <= end; m += BIN) {
+    const e = exp[m] || { full1: 0, full2: 0, half: 0 };
+    bins.push({ m: m, full1: e.full1, full2: e.full2, half: e.half, exp: e.full1 + e.full2 + e.half, act: actual[minToHM(m)] || 0 });
+  }
+  const maxV = Math.max(10, Math.max.apply(null, bins.map(function (b) { return Math.max(b.exp, b.act); })));
+  const bw = 16, H = 170, padL = 34, padB = 22, W = padL + bins.length * bw + 6;
+  const y = function (v) { return H - padB - (v / maxV) * (H - padB - 8); };
+  let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="display:block">';
+  const step = niceStep(maxV);
+  for (let v = 0; v <= maxV; v += step) {
+    svg += '<line x1="' + padL + '" x2="' + W + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#eee"/>' +
+      '<text x="' + (padL - 4) + '" y="' + (y(v) + 3) + '" font-size="9" text-anchor="end" fill="#999">' + v + '</text>';
+  }
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  bins.forEach(function (b, i) {
+    const x = padL + i * bw + 2;
+    let base = 0;
+    ['full1', 'full2', 'half'].forEach(function (k) {
+      if (b[k] <= 0) return;
+      svg += '<rect x="' + x + '" y="' + y(base + b[k]) + '" width="' + (bw - 3) + '" height="' + (y(base) - y(base + b[k])) + '" fill="' + PASS_COLORS[k] + '"/>';
+      base += b[k];
+    });
+    if (b.m % 60 === 0) svg += '<text x="' + (x + bw / 2) + '" y="' + (H - 6) + '" font-size="9" text-anchor="middle" fill="#666">' + minToHM(b.m) + '</text>';
+    if (nowMin >= b.m && nowMin < b.m + BIN) svg += '<rect x="' + (x - 1) + '" y="4" width="' + (bw - 1) + '" height="' + (H - padB - 4) + '" fill="none" stroke="#1565c0" stroke-dasharray="3 2"/>';
+  });
+  const pts = bins.map(function (b, i) { return (padL + i * bw + bw / 2) + ',' + y(b.act); });
+  if (bins.some(function (b) { return b.act > 0; })) {
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#146236" stroke-width="2"/>';
+    bins.forEach(function (b, i) { if (b.act > 0) svg += '<circle cx="' + (padL + i * bw + bw / 2) + '" cy="' + y(b.act) + '" r="2.5" fill="#146236"/>'; });
+  }
+  svg += '</svg>';
+  document.getElementById('chart').innerHTML = svg;
+
+  const rows = bins.filter(function (b) { return b.exp >= 1 || b.act; });
+  document.getElementById('binTable').innerHTML = rows.length ?
+    '<table class="times"><tr><th>時刻</th><th>予想</th><th>実績</th><th>差</th></tr>' + rows.map(function (b) {
+      const diff = b.act - Math.round(b.exp);
+      return '<tr><td>' + minToHM(b.m) + '〜</td><td>' + Math.round(b.exp) + '</td><td class="t">' + (b.act || '-') + '</td><td>' + (b.act ? (diff > 0 ? '+' : '') + diff : '') + '</td></tr>';
+    }).join('') + '</table>' : '<div class="empty">データがありません</div>';
+}
+
+function niceStep(max) { const raw = max / 4, p = Math.pow(10, Math.floor(Math.log10(raw))); const n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
+
+// --- 備品チェック ---
+function renderCheckPanel() {
+  const a = aidById(currentAidId);
+  const el = document.getElementById('panel-check');
+  const items = checksOf(a.id);
+  const done = items.filter(function (c) { return c.checked; }).length;
+  const pct = items.length ? Math.round(done / items.length * 100) : 0;
+  let html = '<div class="card"><h3>備品チェックリスト<span class="note">' + done + '/' + items.length + '(' + pct + '%)</span></h3>' +
+    '<div class="progress"><div style="width:' + pct + '%"></div></div>';
+  if (!items.length) html += '<div class="empty">項目がありません</div>';
+  items.forEach(function (c) {
+    html += '<div class="check-item' + (c.checked ? ' done' : '') + '" data-id="' + esc(c.id) + '">' +
+      '<div class="check-box">' + (c.checked ? '✓' : '') + '</div>' +
+      '<div class="ci-main"><div class="ci-name">' + esc(c.item) + '</div>' +
+      (c.checked && (c.checked_by || c.checked_at) ? '<div class="ci-sub">' + esc(c.checked_by || '') + ' ' + fmtTime(c.checked_at) + '</div>' : '') + '</div>' +
+      '<div class="ci-qty">' + (c.qty !== '' && c.qty !== undefined ? esc(c.qty) + esc(c.unit) : esc(c.unit ? '(' + c.unit + ')' : '')) + '</div>' +
+      '<button class="icon-btn" data-del="' + esc(c.id) + '" title="削除">×</button></div>';
+  });
+  html += '</div>' +
+    '<div class="card"><h3>項目を追加</h3>' +
+    '<div class="three"><div class="field"><label>品名</label><input class="input" id="cItem" placeholder="例: 延長コード"></div>' +
+    '<div class="field"><label>数量</label><input class="input" type="number" inputmode="numeric" id="cQty"></div>' +
+    '<div class="field"><label>単位</label><input class="input" id="cUnit" placeholder="個"></div></div>' +
+    '<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px"><input type="checkbox" id="cAll"> 全エイドに追加する</label>' +
+    '<button class="btn block" id="addCheckBtn">追加する</button></div>';
+  el.innerHTML = html;
+
+  el.querySelectorAll('.check-item').forEach(function (row) {
+    row.addEventListener('click', async function (ev) {
+      if (ev.target.closest('[data-del]')) return;
+      const c = data.checklist.find(function (x) { return x.id === row.getAttribute('data-id'); });
+      const prev = { checked: c.checked, checked_by: c.checked_by, checked_at: c.checked_at };
+      c.checked = !c.checked; c.checked_by = c.checked ? staffName() : ''; c.checked_at = c.checked ? new Date().toISOString() : '';
+      renderCheckPanel();
+      try {
+        await jsonp({ action: 'updateCheck', id: c.id, checked: c.checked, checked_by: c.checked_by });
+      } catch (e) { Object.assign(c, prev); renderCheckPanel(); showToast(e.message, true); }
+    });
+  });
+  el.querySelectorAll('[data-del]').forEach(function (b) {
+    b.addEventListener('click', async function (ev) {
+      ev.stopPropagation();
+      if (!confirm('この項目を削除しますか？')) return;
+      try {
+        await jsonp({ action: 'deleteCheck', id: b.getAttribute('data-del') });
+        data.checklist = data.checklist.filter(function (c) { return c.id !== b.getAttribute('data-del'); });
+        renderCheckPanel();
+      } catch (e) { showToast(e.message, true); }
+    });
+  });
+  document.getElementById('addCheckBtn').addEventListener('click', async function () {
+    const item = val('cItem');
+    if (!item) { showToast('品名を入力してください', true); return; }
+    const all = document.getElementById('cAll').checked;
+    this.disabled = true;
+    try {
+      await jsonp({ action: 'addCheck', aid_id: all ? 'all' : a.id, item: item, qty: val('cQty'), unit: val('cUnit') });
+      await loadAll();
+      showToast(all ? '全エイドに追加しました' : '追加しました'); renderCheckPanel();
+    } catch (e) { showToast(e.message, true); this.disabled = false; }
+  });
+}
+
+function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : minToHM(d.getHours() * 60 + d.getMinutes()); }
+
+// =============================================================================
+// 画面: 地図
+// =============================================================================
+
+function initMap() {
+  if (map) { setTimeout(function () { map.invalidateSize(); }, 50); renderMapMarkers(); return; }
+  map = L.map('map').setView([START_GOAL.lat, START_GOAL.lng], MAP_ZOOM);
+  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>', maxZoom: 18
+  }).addTo(map);
+  if (COURSE.length > 1) {
+    const line = L.polyline(COURSE, { color: '#ea6d9a', weight: 5, opacity: 0.85 }).addTo(map);
+    map.fitBounds(line.getBounds(), { padding: [20, 20] });
+  }
+  L.marker([START_GOAL.lat, START_GOAL.lng], { icon: L.divIcon({ className: '', html: '<div class="sg-marker">🏁 スタート/ゴール</div>', iconSize: null }) }).addTo(map);
+  document.getElementById('mapLegend').innerHTML = STATUS_ORDER.map(function (k) {
+    return '<div><span class="legend-dot" style="background:' + STATUS[k].color + ';border-radius:50%"></span>' + STATUS[k].label + '</div>';
+  }).join('');
+  renderMapMarkers();
+}
+
+function renderMapMarkers() {
+  Object.keys(aidMarkers).forEach(function (k) { map.removeLayer(aidMarkers[k]); });
+  aidMarkers = {};
+  data.aids.forEach(function (a) {
+    const st = statusOf(a);
+    const m = L.marker([Number(a.lat), Number(a.lng)], {
+      icon: L.divIcon({ className: '', html: '<div class="aid-marker" style="background:' + st.color + '">' + esc(a.no) + '</div>', iconSize: [30, 30], iconAnchor: [15, 15] })
+    }).addTo(map);
+    const w = aidWindow(a);
+    m.bindTooltip(esc(a.name) + ' ' + Number(a.km).toFixed(1) + 'km<br>' + minToHM(w.first) + '〜' + minToHM(w.last) + ' / ' + st.label, { direction: 'top', offset: [0, -14] });
+    m.on('click', function () { openDetail(a.id); });
+    aidMarkers[a.id] = m;
+  });
+}
+
+// =============================================================================
+// 画面: 設定
+// =============================================================================
+
+function renderSettings() {
+  const el = document.getElementById('view-settings');
+  const f = function (k, label, type, extra) {
+    return '<div class="field"><label>' + label + '</label><input class="input" data-k="' + k + '" type="' + (type || 'text') + '" ' + (extra || '') + ' value="' + esc(S(k, '')) + '"></div>';
+  };
+  const fp = catParams('full'), hp = catParams('half');
+  el.innerHTML =
+    (isDemo ? '<div class="demo-banner">デモ表示中です(API_URL未設定)。保存はこの画面の中だけに反映されます。</div>' : '') +
+    '<div class="card"><h3>この端末</h3>' +
+      '<div class="field"><label>あなたの名前(備品チェック・カウントの記録に使用)</label><input class="input" id="sStaff" value="' + esc(staffName()) + '"></div></div>' +
+    '<div class="card"><h3>フルマラソン<span class="note">最後尾ペース ' + paceStr(fp.slow) + '/km</span></h3>' +
+      '<div class="two">' + f('full_entries', 'エントリー数', 'number', 'inputmode="numeric"') + f('full_limit', '制限時間(h:mm)') + '</div>' +
+      '<div class="two">' + f('full_start_from', 'スタート開始') + f('full_start_to', 'スタート終了(最終ウェーブ)') + '</div>' +
+      '<div class="two">' + f('full_fast_pace', '先頭ペース(分:秒/km)') + f('full_mid_pace', '平均ペース(分:秒/km)') + '</div></div>' +
+    '<div class="card"><h3>ハーフマラソン<span class="note">最後尾ペース ' + paceStr(hp.slow) + '/km</span></h3>' +
+      '<div class="two">' + f('half_entries', 'エントリー数', 'number', 'inputmode="numeric"') + f('half_limit', '制限時間(h:mm)') + '</div>' +
+      '<div class="two">' + f('half_start_from', 'スタート開始') + f('half_start_to', 'スタート終了(最終ウェーブ)') + '</div>' +
+      '<div class="two">' + f('half_fast_pace', '先頭ペース(分:秒/km)') + f('half_mid_pace', '平均ペース(分:秒/km)') + '</div></div>' +
+    '<div class="card"><h3>共通</h3>' +
+      '<div class="two">' + f('start_rate', '出走率(0〜1)', 'number', 'step="0.01" inputmode="decimal"') + f('lap_km', '1周の距離(km)', 'number', 'step="0.0001" inputmode="decimal"') + '</div>' +
+      '<div class="two">' + f('open_before_min', '営業開始=先頭の何分前', 'number', 'inputmode="numeric"') + f('close_after_min', '撤収=最後尾の何分後', 'number', 'inputmode="numeric"') + '</div>' +
+      '<div class="muted" style="margin-bottom:10px;line-height:1.6">予想時刻は「スタート時刻 + 距離 × ペース」で計算しています。先頭は最初のウェーブ×先頭ペース、ピークは中央のウェーブ×平均ペース、最後尾は最終ウェーブ×制限時間ぎりぎりのペースです。</div>' +
+      '<button class="btn block" id="saveSettingsBtn">設定を保存</button></div>' +
+    '<div class="card"><h3>各エイドの専用ページ</h3>' + data.aids.map(function (a) {
+      return '<div class="menu-item"><div class="mi-main"><div class="mi-name">' + esc(a.name) + '</div><div class="url-text">' + esc(aidUrl(a.id)) + '</div></div>' +
+        '<button class="btn small ghost" data-copy="' + esc(aidUrl(a.id)) + '">コピー</button></div>';
+    }).join('') + '</div>';
+
+  document.getElementById('sStaff').addEventListener('change', function () { lsSet('tfm_aid_staff', this.value.trim()); showToast('名前を保存しました'); });
+  el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copyText(b.getAttribute('data-copy')); }); });
+  document.getElementById('saveSettingsBtn').addEventListener('click', async function () {
+    const params = { action: 'saveSettings' };
+    el.querySelectorAll('[data-k]').forEach(function (i) { params[i.getAttribute('data-k')] = i.value.trim(); });
+    this.disabled = true;
+    try {
+      await jsonp(params);
+      Object.keys(params).forEach(function (k) { if (k !== 'action') data.settings[k] = params[k]; });
+      showToast('設定を保存しました');
+      renderSettings();
+    } catch (e) { showToast(e.message, true); this.disabled = false; }
+  });
+}
+
+// =============================================================================
+// 画面切り替え・共通
+// =============================================================================
+
+function switchView(v) {
+  currentView = v;
+  document.querySelectorAll('.view').forEach(function (el) { el.classList.toggle('active', el.id === 'view-' + v); });
+  document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.getAttribute('data-view') === v); });
+  const detail = v === 'detail';
+  document.getElementById('tabbar').classList.toggle('hidden', detail);
+  document.getElementById('main').classList.toggle('detail-mode', detail);
+  document.getElementById('backBtn').style.display = detail ? 'flex' : 'none';
+  if (!detail) document.getElementById('headerTitle').textContent = 'エイド運営管理';
+  document.getElementById('main').scrollTop = 0;
+  renderCurrent();
+}
+
+function renderCurrent() {
+  if (currentView === 'list') renderList();
+  else if (currentView === 'map') initMap();
+  else if (currentView === 'settings') renderSettings();
+  else if (currentView === 'detail') renderDetail();
+}
+
+function copyText(t) {
+  const done = function () { showToast('URLをコピーしました'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(done).catch(function () { prompt('URLをコピーしてください', t); });
+  } else { prompt('URLをコピーしてください', t); }
+}
+
+let toastTimer = null;
+function showToast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2600);
+}
+
+async function reload() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  try { await flushPending(); await loadAll(); renderCurrent(); }
+  catch (e) { showToast(e.message, true); }
+  finally { btn.classList.remove('spinning'); }
+}
+
+document.querySelectorAll('.tab').forEach(function (t) { t.addEventListener('click', function () { switchView(t.getAttribute('data-view')); }); });
+document.getElementById('backBtn').addEventListener('click', closeDetail);
+document.getElementById('refreshBtn').addEventListener('click', reload);
+window.addEventListener('online', flushPending);
+
+// 30秒ごとに通過人数を更新(画面が表示されている間のみ)
+setInterval(function () {
+  if (document.hidden) return;
+  if (pending.length) flushPending();
+  if (currentView === 'list' || (currentView === 'detail' && detailTab === 'count')) refreshCounts();
+}, 30000);
+
+// =============================================================================
+// デモデータ(API_URL 未設定時のみ)
+// =============================================================================
+
+function demoApi(p) {
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      if (!window.__demo) window.__demo = buildDemo();
+      const D = window.__demo;
+      const r = { success: true };
+      if (p.action === 'getAll') Object.assign(r, JSON.parse(JSON.stringify(D)));
+      else if (p.action === 'getCounts') r.counts = JSON.parse(JSON.stringify(D.counts));
+      else if (p.action === 'updateAid') {
+        const a = D.aids.find(function (x) { return x.id === p.id; });
+        Object.keys(p).forEach(function (k) { if (k !== 'action' && k !== 'id' && k !== 'delta_checked_in') a[k] = p[k]; });
+        if (p.delta_checked_in !== undefined) a.volunteers_checked_in = Math.max(0, (Number(a.volunteers_checked_in) || 0) + Number(p.delta_checked_in));
+        r.aid = Object.assign({}, a);
+      } else if (p.action === 'addMenu') { r.id = 'm_' + Date.now(); D.menu.push(Object.assign({ id: r.id }, p)); }
+      else if (p.action === 'deleteMenu') D.menu = D.menu.filter(function (m) { return m.id !== p.id; });
+      else if (p.action === 'addCheck') {
+        (p.aid_id === 'all' ? D.aids.map(function (a) { return a.id; }) : [p.aid_id]).forEach(function (id) {
+          D.checklist.push({ id: 'c_' + Math.random(), aid_id: id, item: p.item, qty: p.qty, unit: p.unit, checked: false });
+        });
+      } else if (p.action === 'updateCheck') {
+        const c = D.checklist.find(function (x) { return x.id === p.id; });
+        c.checked = String(p.checked) === 'true'; c.checked_by = p.checked_by; c.checked_at = c.checked ? new Date().toISOString() : '';
+      } else if (p.action === 'deleteCheck') D.checklist = D.checklist.filter(function (c) { return c.id !== p.id; });
+      else if (p.action === 'addCount') {
+        if (!D.counts[p.aid_id]) D.counts[p.aid_id] = { total: 0, bins: {} };
+        const d = new Date(Number(p.ts)); const k = minToHM(Math.floor((d.getHours() * 60 + d.getMinutes()) / BIN) * BIN);
+        D.counts[p.aid_id].total += Number(p.delta); D.counts[p.aid_id].bins[k] = (D.counts[p.aid_id].bins[k] || 0) + Number(p.delta);
+      } else if (p.action === 'saveSettings') Object.keys(p).forEach(function (k) { if (k !== 'action') D.settings[k] = p[k]; });
+      resolve(r);
+    }, 120);
+  });
+}
+
+function buildDemo() {
+  const pos = [[38.6990316, 141.1456184, 2.0], [38.6965143, 141.1518393, 4.0], [38.7049039, 141.1538085, 6.3], [38.7093853, 141.1413885, 7.9],
+    [38.7010329, 141.1323057, 9.4], [38.6932452, 141.1205325, 11.0], [38.6906385, 141.1064702, 13.0], [38.6836578, 141.1136676, 15.5], [38.6798149, 141.1237019, 17.2]];
+  const circled = '①②③④⑤⑥⑦⑧⑨';
+  const tmpl = [['テント', 1, '張'], ['長机', 3, '台'], ['パイプ椅子', 4, '脚'], ['ウォータージャグ', 2, '個'], ['紙コップ', '', '個'], ['ゴミ袋(45L)', 20, '枚'], ['救急セット', 1, '式']];
+  const aids = pos.map(function (p, i) {
+    return { id: 'A' + (i + 1), no: i + 1, name: 'エイド' + circled[i], lat: p[0], lng: p[1], km: p[2], leader: i === 0 ? '山田 太郎' : '', leader_tel: i === 0 ? '090-0000-0000' : '',
+      sub_leader: '', volunteers_planned: 8 + (i % 3) * 2, volunteers_checked_in: i < 2 ? 5 : 0, water: '水・スポーツドリンク', status: i === 0 ? 'ready' : 'preparing', memo: '' };
+  });
+  const checklist = [];
+  aids.forEach(function (a, ai) { tmpl.forEach(function (t, i) { checklist.push({ id: 'c' + ai + '_' + i, aid_id: a.id, item: t[0], qty: t[1], unit: t[2], checked: ai === 0 && i < 4, checked_by: '', checked_at: '' }); }); });
+  return {
+    aids: aids,
+    menu: [{ id: 'm1', aid_id: 'A1', item: '(例)仙台牛の串焼き', provider: '(例)〇〇精肉店', qty: 3000, unit: '本', target: 'all', memo: '' }],
+    checklist: checklist,
+    settings: {
+      lap_km: '21.0975', start_rate: '0.9', full_entries: '1500', full_start_from: '08:30', full_start_to: '09:00', full_fast_pace: '3:05',
+      full_mid_pace: '6:30', full_limit: '6:30', full_distance: '42.195', half_entries: '3000', half_start_from: '09:00', half_start_to: '11:00',
+      half_fast_pace: '3:10', half_mid_pace: '6:45', half_limit: '3:30', half_distance: '21.0975', open_before_min: '30', close_after_min: '15'
+    },
+    counts: {}
+  };
+}
+
+// =============================================================================
+// 起動
+// =============================================================================
+
+(async function init() {
+  try {
+    await loadAll();
+  } catch (e) {
+    showToast(e.message, true);
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+  }
+  updateSyncBadge();
+  const q = new URLSearchParams(location.search).get('aid');
+  if (q && aidById(q)) openDetail(q); else renderCurrent();
+  if (pending.length) flushPending();
+})();
+</script>
+</body>
+</html>
