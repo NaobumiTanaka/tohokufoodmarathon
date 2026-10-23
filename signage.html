@@ -551,7 +551,7 @@ function renderSavedCourseLine() {
   if (savedCoursePoints.length > 1) {
     if (placeholderMarker) { map.removeLayer(placeholderMarker); placeholderMarker = null; }
     const latlngs = savedCoursePoints.map(function (p) { return [p.lat, p.lng]; });
-    courseLine = L.polyline(latlngs, { color: '#616161', weight: 4, opacity: 0.75 }).addTo(map);
+    courseLine = L.polyline(latlngs, { color: '#ea6d9a', weight: 4, opacity: 0.75 }).addTo(map);
   } else if (!placeholderMarker) {
     showPlaceholderMarker();
   }
